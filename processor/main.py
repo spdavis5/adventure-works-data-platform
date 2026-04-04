@@ -68,17 +68,24 @@ def run_once():
             ("chat_stage", "chat_logs_raw", "JSON"),
         ]
 
-        # TODO: Loop through the stages list above and call
-        #   copy_stage_to_table(stage_name, table_name, fmt, connection=sf_conn)
-        # for each one. Print the results (rows_copied, rows_skipped).
-        #
-        # Then, if ENABLE_CLEANUP is True, call clean_stage() for each
-        # stage whose COPY succeeded. Skip cleanup for any stage where
-        # COPY failed — keep those files in the stage so the next cycle
-        # can retry.
-        #
-        # Hint: Store each copy result in a list so you can check
-        # result["status"] == "success" before cleaning that stage.
+        # Loop through the stages list and execute COPY INTO for each
+        for stage_name, table_name, fmt in stages:
+            copy_result = copy_stage_to_table(stage_name, table_name, file_format=fmt, connection=sf_conn)
+            
+            # Print metrics for the COPY operation
+            if copy_result["status"] == "success":
+                print(f"COPY {stage_name} -> {table_name}: {copy_result['rows_copied']} rows copied, {copy_result['rows_skipped']} skipped ({copy_result['execution_time_sec']}s)")
+                
+                # Smart Pattern: Only clean the stage if the COPY succeeded
+                if ENABLE_CLEANUP:
+                    clean_result = clean_stage(stage_name, connection=sf_conn)
+                    if clean_result["status"] == "success":
+                        print(f"Cleaning {stage_name}: {clean_result['files_removed']} files removed ({clean_result['execution_time_sec']}s)")
+                    else:
+                        print(f"[ERROR] Failed to clean {stage_name}: {clean_result['error_message']}")
+            else:
+                print(f"[ERROR] COPY failed for {stage_name}: {copy_result['error_message']}")
+                print(f"Cleanup skipped for {stage_name} to preserve files for retry.")
 
         sf_conn.close()
 

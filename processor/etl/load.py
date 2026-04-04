@@ -33,40 +33,84 @@ def upload_dataframe_to_stage(df, label, stage_name, run_time, file_format="csv"
 
 
 def copy_stage_to_table(stage_name, table_name, file_format="CSV", connection=None):
-    """
-    Execute COPY INTO command to load staged files into a raw table.
+    import time
+    start_time = time.time()
+    
+    metrics = {
+        "rows_copied": 0,
+        "rows_skipped": 0,
+        "execution_time_sec": 0,
+        "status": "success",
+        "error_message": ""
+    }
 
-    Args:
-        stage_name: Name of Snowflake stage (e.g., "orders_stage")
-        table_name: Target raw table name (e.g., "orders_raw")
-        file_format: File format (CSV or JSON)
-        connection: Snowflake connector connection object
+    try:
+        cur = connection.cursor()
+        
+        # Build SQL based on format
+        if file_format.upper() == "CSV":
+            # standard CSV loading logic
+            sql = f"""
+                COPY INTO {table_name}
+                FROM @{stage_name}/
+                FILE_FORMAT = (
+                    TYPE = CSV 
+                    SKIP_HEADER = 1 
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '\"'
+                    NULL_IF = ('', 'NULL')
+                )
+                ON_ERROR = 'CONTINUE';
+            """
+        else:
+            # JSON loading logic (for variant columns)
+            sql = f"""
+                COPY INTO {table_name}
+                FROM @{stage_name}/
+                FILE_FORMAT = (TYPE = JSON)
+                ON_ERROR = 'CONTINUE';
+            """
 
-    Returns:
-        dict with keys: rows_copied, rows_skipped, execution_time_sec, status, error_message
-    """
-    # TODO: Implement COPY INTO logic
-    # - Execute a COPY INTO command from @{stage_name}/ into {table_name}
-    # - Handle both CSV and JSON file formats
-    # - Parse the COPY INTO result to count rows copied/skipped
-    # - Return a metrics dict matching the signature above
-    # - Handle errors gracefully (set status="error" with error_message)
-    raise NotImplementedError("Implement copy_stage_to_table")
+        results = cur.execute(sql).fetchall()
+        
+        # Sum up the results from all files in the stage
+        for row in results:
+            # row[3] is rows_loaded, row[5] is errors_seen
+            metrics["rows_copied"] += int(row[3])
+            metrics["rows_skipped"] += int(row[5])
 
+        cur.close()
+
+    except Exception as e:
+        metrics["status"] = "error"
+        metrics["error_message"] = str(e)
+    
+    metrics["execution_time_sec"] = round(time.time() - start_time, 2)
+    return metrics
 
 def clean_stage(stage_name, connection=None):
-    """
-    Execute REMOVE command to delete staged files after successful loading.
+    import time
+    start_time = time.time()
+    
+    metrics = {
+        "files_removed": 0,
+        "execution_time_sec": 0,
+        "status": "success",
+        "error_message": ""
+    }
 
-    Args:
-        stage_name: Name of Snowflake stage to clean
-        connection: Snowflake connector connection object
+    try:
+        cur = connection.cursor()
+        # Execute REMOVE to delete files from the internal stage
+        sql = f"REMOVE @{stage_name}/;"
+        results = cur.execute(sql).fetchall()
+        
+        # Each row in the result represents one removed file
+        metrics["files_removed"] = len(results)
+        cur.close()
 
-    Returns:
-        dict with keys: files_removed, execution_time_sec, status, error_message
-    """
-    # TODO: Implement stage cleanup logic
-    # - Execute REMOVE @{stage_name}/ to delete staged files
-    # - Count how many files were removed
-    # - Return a metrics dict matching the signature above
-    raise NotImplementedError("Implement clean_stage")
+    except Exception as e:
+        metrics["status"] = "error"
+        metrics["error_message"] = str(e)
+    
+    metrics["execution_time_sec"] = round(time.time() - start_time, 2)
+    return metrics
