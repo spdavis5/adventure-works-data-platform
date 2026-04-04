@@ -2,7 +2,7 @@
 -- Milestone 1: Data Flow Validation Queries
 -- ============================================================================
 -- Run these queries one at a time to trace data through your pipeline.
--- Set your database first: USE DATABASE <your_database>;
+-- Set your database first: USE DATABASE CRICKET_DB;
 -- ============================================================================
 
 
@@ -52,7 +52,7 @@ LIST @raw_ext.chat_stage;
 -- SUCCESS: All 4 models have rows > 0.
 -- stg_ecom__sales_orders should have the most (legacy + new data).
 
-SELECT 'stg_ecom__sales_orders' AS model, COUNT(*) AS rows FROM dbt_dev.stg_ecom__sales_orders
+SELECT 'stg_ecom__sales_orders' AS model, COUNT(*) AS row_count FROM dbt_dev.stg_ecom__sales_orders
 UNION ALL
 SELECT 'stg_real_time__chat_logs', COUNT(*) FROM dbt_dev.stg_real_time__chat_logs
 UNION ALL
@@ -110,7 +110,7 @@ GROUP BY 1;
 -- 3-5x the order count. Chat logs should be a smaller number.
 
 SELECT
-    'raw_ext.orders_raw' AS layer, COUNT(*) AS rows FROM raw_ext.orders_raw
+    'raw_ext.orders_raw' AS layer, COUNT(*) AS row_count FROM raw_ext.orders_raw
 UNION ALL
 SELECT 'raw_ext.order_details_raw', COUNT(*) FROM raw_ext.order_details_raw
 UNION ALL
