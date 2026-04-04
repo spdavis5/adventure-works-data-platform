@@ -18,3 +18,4 @@ tests_sol/
 *.sol*
 *_sol*
 __pycache__
+.venv/
