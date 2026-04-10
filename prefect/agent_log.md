@@ -2,17 +2,16 @@
 
 ## 1. Setup
 
-**Agent tool used:** Antigravity Desktop App (Claude Opus 4.6)
-
-**Why this tool?** Antigravity provides a structured planning layer that helps the agent understand system context before generating code. I selected Claude Opus 4.6 for its strong reasoning ability in complex data engineering scenarios.
-
-**Date:** April 9, 2026
-
+**Agent tool used:** Antigravity Desktop App (Claude Opus 4.6)  
+**Why this tool?** Antigravity provides a structured planning layer that helps the agent understand system context and plan thoroughly before generating code. I chose Claude Opus 4.6 for its strong reasoning ability and code quality.  
+**Date:** April 9, 2026  
 **Total time spent:** 30 minutes
 
 ---
 
 ## 2. Initial Specification
+
+_What did you give the agent to start with? Paste or summarize your initial prompt/instruction._
 
 ```text
 Role: You are a Lead Data Engineer building a production pipeline.
@@ -32,6 +31,8 @@ Output: Complete code for web_analytics_flow.py and a technical implementation s
 
 ## 3. Iteration Log
 
+_Document the key back-and-forth iterations. You don't need to capture every message, but capture the important turning points._
+
 ### Iteration 1: Core Pipeline Implementation
 
 - **What I asked:** Build the core flow based on the PRD and API documentation.
@@ -48,22 +49,25 @@ Output: Complete code for web_analytics_flow.py and a technical implementation s
 - **What didn't work:** The Antigravity terminal execution lacked transparency, making it difficult to confirm which commands were being run.
 - **What I changed:** I took manual control of final terminal testing to ensure both environment and data integrity.
 
+### Iteration 3: Production Hardening and Observability
+
+- **What I asked:** Add comprehensive error handling for API and Snowflake operations and include detailed logging for record counts at each step.
+- **What the agent produced:** Refactored tasks using try/except blocks specifically for `snowflake.connector.Error` and enhanced logging that reports rows processed versus rows loaded.
+- **What worked:** The pipeline now provides clear audit trails and fails gracefully with specific error messages if permissions or network issues arise.
+- **What I changed:** I guided the agent to catch specific Snowflake exceptions rather than using a general catch-all to improve technical precision.
+
 ---
 
 ## 4. Final Result
 
-**Did the agent-generated code work on first run?** No.
-
-**If no, what broke?** The initial version did not include logic to create required Snowflake objects. It assumed a pre-initialized database, which caused a failure during the first execution.
-
+**Did the agent-generated code work on first run?** No.  
+**If no, what broke?** The initial version lacked logic to create required Snowflake objects and ignored defensive error handling for database connections and SQL execution.  
 **Percentage of final code written by the agent vs. you:**
 
-- Agent wrote: 95%
-- I wrote/modified: 5%
-
-**Key files the agent created or modified:**
-
-- [web_analytics_flow.py]&#58; Implemented a five-task pipeline with retry logic, controlled cleanup, and detailed logging.
+- Agent wrote: 90%
+- I wrote/modified: 10%  
+  **Key files the agent created or modified:**
+- web_analytics_flow.py: Implemented a five-task pipeline with retry logic, specialized Snowflake error handling, and row-level logging for auditability.
 
 ---
 
@@ -71,27 +75,27 @@ Output: Complete code for web_analytics_flow.py and a technical implementation s
 
 ### What the agent was good at:
 
-- Contextual understanding: The agent effectively used snowflake_objects.sql and agent-docs.md to map API data to the Snowflake schema.
-- Pattern generation: It produced correct Prefect task structures and handled Snowflake result processing reliably.
+- Contextual Mapping: The agent effectively used provided DDL and documentation to map API data structures to the Snowflake schema.
+- Task Structuring: It produced correct Prefect task syntax and handled asynchronous patterns reliably.
 
 ### What the agent struggled with:
 
-- Execution visibility: The abstraction of terminal commands made it difficult to verify what was happening during execution.
-- Defensive design: It initially assumed an existing database setup rather than building safeguards into the pipeline.
+- Defensive Design: It prioritized the "happy path" and required multiple prompts to include object verification and specific exception handling.
+- Execution Visibility: The abstraction of background commands made it difficult to verify the "ground truth" of the execution without manual intervention.
 
 ### What I would do differently next time:
 
-- Define constraints earlier: I would explicitly require environment validation and setup steps in the initial prompt.
-- Validate incrementally: I would test individual components before allowing the agent to assemble the full pipeline.
+- Explicit Constraints: I would require environment validation and specific error-handling patterns in the initial prompt.
+- Modular Prompting: I would test the connection and extraction tasks individually before having the agent assemble the entire load sequence.
 
 ### Time comparison estimate:
 
-- **With agent:** 30 minutes
-- **Without agent (estimate):** 3 hours
-- **Net impact:** Significantly faster. The agent significantly reduced the time spent writing standard pipeline components. The prefect flow it built is robust and production ready.
+- **With agent:** 45 minutes (including hardening and debugging)
+- **Without agent (estimate):** 3–4 hours
+- **Net impact:** Significant speed increase. While handing the task to an AI agent requires checking for logical assumptions, the agent drastically reduced time spent on boilerplate code and data transformation logic.
 
 ---
 
 ## 6. Reflection
 
-Using Antigravity with Claude Opus shifted my focus from implementation details to system design and requirements. I was impressed by how well the agent incorporated context and translated it into a working pipeline. However, the lack of visibility into background execution is a concern, particularly from a reliability and security standpoint. Going forward, I will use AI tools like Antigravity for planning out and generating logic, but I will control execution and validation. I would also like to explore some of Antigravity's other features like mcp and agent instructions to see if they can improve the agent's ability to understand and execute complex tasks, and provide better visibility into background execution.
+Using Antigravity with Claude Opus shifted my focus from coding details to system design and requirements. I am confident in the robustness of the final flow, but the process was a good example of the need for human oversight in defensive engineering. I will continue to use AI for generating logic and patterns but will maintain control over terminal execution and environmental validation to ensure security and reliability.
