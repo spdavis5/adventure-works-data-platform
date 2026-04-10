@@ -19,7 +19,7 @@ renamed as (
         
         -- Metadata for tracking when dbt processed this record
         current_timestamp() as dbt_updated_at
-
+        -- CI test run
     from source
 
 )
