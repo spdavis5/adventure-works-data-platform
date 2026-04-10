@@ -42,16 +42,21 @@ REQUIRED_FIELDS = [
 # ---------------------------------------------------------------------------
 
 def _get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
-    """Return a fresh Snowflake connection using env vars."""
-    return snowflake.connector.connect(
-        user=os.getenv("SNOWFLAKE_USER"),
-        password=os.getenv("SNOWFLAKE_PASSWORD"),
-        account=os.getenv("SNOWFLAKE_ACCOUNT"),
-        warehouse=os.getenv("SNOWFLAKE_WAREHOUSE"),
-        database=os.getenv("SNOWFLAKE_DATABASE"),
-        schema=os.getenv("SNOWFLAKE_SCHEMA", "RAW_EXT"),
-        role=os.getenv("SNOWFLAKE_ROLE"),
-    )
+    """Return a fresh Snowflake connection using env vars with error handling."""
+    try:
+        return snowflake.connector.connect(
+            user=os.getenv("SNOWFLAKE_USER"),
+            password=os.getenv("SNOWFLAKE_PASSWORD"),
+            account=os.getenv("SNOWFLAKE_ACCOUNT"),
+            warehouse=os.getenv("SNOWFLAKE_WAREHOUSE"),
+            database=os.getenv("SNOWFLAKE_DATABASE"),
+            schema=os.getenv("SNOWFLAKE_SCHEMA", "RAW_EXT"),
+            role=os.getenv("SNOWFLAKE_ROLE"),
+        )
+    except snowflake.connector.Error as e:
+        # Logging connection failures specifically (Task 4.4 requirement)
+        print(f"Failed to connect to Snowflake: {e}")
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -68,25 +73,30 @@ def ensure_snowflake_objects() -> None:
     conn = _get_snowflake_connection()
     try:
         cur = conn.cursor()
-        cur.execute("CREATE SCHEMA IF NOT EXISTS RAW_EXT")
-        cur.execute(
-            "CREATE STAGE IF NOT EXISTS RAW_EXT.WEB_ANALYTICS_STAGE "
-            "COMMENT = 'Stage for web analytics CSV files uploaded by the Prefect flow'"
-        )
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS RAW_EXT.web_analytics_raw (
-                customer_id       INT            NOT NULL,
-                product_id        INT            NOT NULL,
-                session_id        VARCHAR(255)   NOT NULL,
-                page_url          VARCHAR(1000),
-                event_type        VARCHAR(50),
-                event_timestamp   TIMESTAMP_NTZ  NOT NULL,
-                _loaded_at        TIMESTAMP_NTZ  DEFAULT CURRENT_TIMESTAMP(),
-                _file_name        VARCHAR(255)
+        try:
+            cur.execute("CREATE SCHEMA IF NOT EXISTS RAW_EXT")
+            cur.execute(
+                "CREATE STAGE IF NOT EXISTS RAW_EXT.WEB_ANALYTICS_STAGE "
+                "COMMENT = 'Stage for web analytics CSV files uploaded by the Prefect flow'"
             )
-        """)
-        cur.close()
-        logger.info("Snowflake objects verified (schema / stage / table).")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS RAW_EXT.web_analytics_raw (
+                    customer_id       INT            NOT NULL,
+                    product_id        INT            NOT NULL,
+                    session_id        VARCHAR(255)   NOT NULL,
+                    page_url          VARCHAR(1000),
+                    event_type        VARCHAR(50),
+                    event_timestamp   TIMESTAMP_NTZ  NOT NULL,
+                    _loaded_at        TIMESTAMP_NTZ  DEFAULT CURRENT_TIMESTAMP(),
+                    _file_name        VARCHAR(255)
+                )
+            """)
+            logger.info("Snowflake objects verified (schema / stage / table).")
+        except snowflake.connector.ProgrammingError as e:
+            logger.error(f"Snowflake DDL execution failed: {e}")
+            raise
+        finally:
+            cur.close()
     finally:
         conn.close()
 
@@ -103,23 +113,28 @@ def fetch_watermark() -> str | None:
     conn = _get_snowflake_connection()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT MAX(event_timestamp) FROM RAW_EXT.web_analytics_raw")
-        row = cur.fetchone()
-        cur.close()
+        try:
+            cur.execute("SELECT MAX(event_timestamp) FROM RAW_EXT.web_analytics_raw")
+            row = cur.fetchone()
+            
+            if row is None or row[0] is None:
+                logger.info("No existing watermark found — first run detected.")
+                return None
 
-        if row is None or row[0] is None:
-            logger.info("No existing watermark found — first run detected.")
-            return None
+            # Snowflake returns a datetime object; convert to ISO string
+            watermark = row[0]
+            if isinstance(watermark, datetime):
+                watermark_str = watermark.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            else:
+                watermark_str = str(watermark)
 
-        # Snowflake returns a datetime object; convert to ISO string
-        watermark = row[0]
-        if isinstance(watermark, datetime):
-            watermark_str = watermark.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        else:
-            watermark_str = str(watermark)
-
-        logger.info(f"Watermark fetched: {watermark_str}")
-        return watermark_str
+            logger.info(f"Watermark fetched: {watermark_str}")
+            return watermark_str
+        except snowflake.connector.Error as e:
+            logger.error(f"Failed to query watermark from Snowflake: {e}")
+            raise
+        finally:
+            cur.close()
     finally:
         conn.close()
 
@@ -175,16 +190,9 @@ def extract_events(since: str | None) -> list[dict]:
             logger.info(f"Extracted {len(events)} events from API.")
             return events
 
-        except requests.exceptions.Timeout:
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
             logger.warning(
-                f"Request timed out (attempt {attempt}/{max_retries}). "
-                f"Retrying in {backoff}s."
-            )
-            time.sleep(backoff)
-            backoff *= 2
-        except requests.exceptions.ConnectionError:
-            logger.warning(
-                f"Connection error (attempt {attempt}/{max_retries}). "
+                f"Network issue (attempt {attempt}/{max_retries}): {e}. "
                 f"Retrying in {backoff}s."
             )
             time.sleep(backoff)
@@ -250,7 +258,6 @@ def stage_and_load(df: pd.DataFrame) -> None:
     logger = get_run_logger()
 
     # Columns to write — matches the first 6 columns of the target table.
-    # _loaded_at uses DEFAULT CURRENT_TIMESTAMP(), _file_name is set by COPY.
     csv_columns = [
         "customer_id",
         "product_id",
@@ -270,21 +277,25 @@ def stage_and_load(df: pd.DataFrame) -> None:
     try:
         # --- 1. Write local CSV (with headers) ---
         df[csv_columns].to_csv(local_path, index=False)
-        logger.info(f"Wrote {len(df)} rows to {local_path}")
+        logger.info(f"Local CSV staged: {filename} contains {len(df)} records.")
 
         conn = _get_snowflake_connection()
         try:
             cur = conn.cursor()
 
-            # --- 2. PUT to internal stage ---
-            put_sql = (
-                f"PUT file://{local_path} @WEB_ANALYTICS_STAGE/ "
-                f"AUTO_COMPRESS=TRUE OVERWRITE=TRUE"
-            )
-            cur.execute(put_sql)
-            logger.info(f"PUT {filename} to @WEB_ANALYTICS_STAGE.")
+            # --- 2. PUT to internal stage (Task 4.4 error handling) ---
+            try:
+                put_sql = (
+                    f"PUT file://{local_path} @WEB_ANALYTICS_STAGE/ "
+                    f"AUTO_COMPRESS=TRUE OVERWRITE=TRUE"
+                )
+                cur.execute(put_sql)
+                logger.info(f"PUT {filename} to Snowflake stage successful.")
+            except snowflake.connector.Error as e:
+                logger.error(f"Failed to PUT file to Snowflake: {e}")
+                raise
 
-            # --- 3. COPY INTO ---
+            # --- 3. COPY INTO (Task 4.4 error handling) ---
             copy_sql = f"""
                 COPY INTO RAW_EXT.web_analytics_raw
                     (customer_id, product_id, session_id,
@@ -298,50 +309,48 @@ def stage_and_load(df: pd.DataFrame) -> None:
                 )
                 ON_ERROR = 'ABORT_STATEMENT';
             """
-            results = cur.execute(copy_sql).fetchall()
+            try:
+                results = cur.execute(copy_sql).fetchall()
+                
+                # --- 4. Verify load result (Task 4.4 detailed counts) ---
+                total_loaded = 0
+                total_errors = 0
+                for row in results:
+                    total_loaded += int(row[3])
+                    total_errors += int(row[5])
 
-            # --- 4. Verify load result ---
-            total_loaded = 0
-            total_errors = 0
-            for row in results:
-                # Standard COPY INTO result columns:
-                #   file, status, rows_parsed, rows_loaded,
-                #   error_limit, errors_seen, ...
-                total_loaded += int(row[3])
-                total_errors += int(row[5])
+                if total_errors > 0:
+                    raise RuntimeError(
+                        f"COPY INTO aborted: {total_errors} errors encountered. "
+                        f"Aborting cleanup for debugging."
+                    )
 
-            if total_errors > 0:
-                raise RuntimeError(
-                    f"COPY INTO completed with {total_errors} error(s). "
-                    f"Loaded {total_loaded} rows. Aborting cleanup."
-                )
+                logger.info(f"Snowflake Load Result: {total_loaded} rows inserted, 0 errors.")
 
-            logger.info(
-                f"COPY INTO successful: {total_loaded} rows loaded, "
-                f"0 errors."
-            )
+                # --- 5. Cleanup (post-success only) ---
+                cur.execute(f"REMOVE @WEB_ANALYTICS_STAGE/{filename}")
+                logger.info("Internal stage cleanup complete.")
 
-            # --- 5. Cleanup (post-success only) ---
-            cur.execute(f"REMOVE @WEB_ANALYTICS_STAGE/{filename}")
-            logger.info("Staged file removed from @WEB_ANALYTICS_STAGE.")
-
-            cur.close()
+            except snowflake.connector.Error as e:
+                logger.error(f"Snowflake COPY INTO failed: {e}")
+                raise
+            finally:
+                cur.close()
         finally:
             conn.close()
 
         # Delete local CSV after successful load
         if os.path.exists(local_path):
             os.remove(local_path)
-            logger.info(f"Local CSV {filename} deleted.")
+            logger.info(f"Local temp file {filename} deleted.")
 
-    except Exception:
+    except Exception as e:
         logger.error(
-            "Stage/load failed — local CSV and staged file preserved "
-            "for investigation."
+            f"Pipeline Stage/Load error: {str(e)}. Files preserved in {tmpdir}"
         )
         raise
     finally:
-        # Best-effort removal of the temp directory (may already be empty)
+        # Best-effort removal of the temp directory
         try:
             os.rmdir(tmpdir)
         except OSError:
@@ -373,40 +382,37 @@ def web_analytics_flow() -> None:
     raw_events = extract_events(since=watermark)
 
     if not raw_events:
-        logger.info("API returned 0 records — nothing to load. Exiting.")
+        logger.info("No new behavioral data found in API. Flow idle.")
         return
 
     # Step 3 — Clean / Validate
     df = clean_and_validate(raw_events)
 
     if df.empty:
-        logger.info(
-            "All records were dropped during validation — nothing to load."
-        )
+        logger.info("Zero valid records remained after cleaning. Flow idle.")
         return
 
     # Step 4 — Stage & Load
     stage_and_load(df)
 
     logger.info(
-        f"Flow complete — {len(df)} records loaded into "
-        f"RAW_EXT.web_analytics_raw."
+        f"Flow Success: {len(df)} records added to RAW_EXT.web_analytics_raw."
     )
 
 
 # ---------------------------------------------------------------------------
-# Entrypoint — supports `python -m flows.web_analytics_flow`
+# Entrypoint
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     schedule_minutes = int(os.getenv("FLOW_SCHEDULE_MINUTES", "0"))
 
     if schedule_minutes > 0:
-        # Deployed mode with a schedule
-        web_analytics_flow.serve(
-            name="web-analytics-scheduled",
-            interval=schedule_minutes * 60,
-        )
-    else:
-        # One-shot local execution
+    #     # Deployed mode with a schedule (Task 3.1 requirement)
+    #     web_analytics_flow.serve(
+    #         name="web-analytics-scheduled",
+    #         interval=schedule_minutes * 60,
+    #     )
+    # else:
+    #     # One-shot local execution for manual triggers or dbt tests
         web_analytics_flow()
