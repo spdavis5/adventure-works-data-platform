@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: int_web_analytics_with_customers
+    description: "Clickstream events enriched with customer geography and identity details. Preserves all events via left join."
+    columns:
+      - name: customer_id
+        description: "The ID of the customer who performed the action."
+        data_tests:
+          - not_null
+
+      - name: session_id
+        description: "The unique session identifier for the web visit."
+        data_tests:
+          - not_null
+
+      - name: full_name
+        description: "Customer name from the production database."
+
+      - name: country_region
+        description: "The country or region of the customer, used for geographic slicing."
+
+      - name: event_timestamp
+        description: "When the event occurred."

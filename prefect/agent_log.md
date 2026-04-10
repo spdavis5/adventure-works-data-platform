@@ -33,6 +33,7 @@ Output: Complete code for web_analytics_flow.py and a technical implementation s
 ## 3. Iteration Log
 
 ### Iteration 1: Core Pipeline Implementation
+
 - **What I asked:** Build the core flow based on the PRD and API documentation.
 - **What the agent produced:** A complete Prefect flow with four tasks covering watermarking, extraction, cleaning, and staging.
 - **What worked:** The incremental loading logic was implemented correctly, including proper handling of a NULL watermark for the initial run.
@@ -40,6 +41,7 @@ Output: Complete code for web_analytics_flow.py and a technical implementation s
 - **What I changed:** I instructed the agent to make the pipeline more robust by handling missing Snowflake objects.
 
 ### Iteration 2: Self-Bootstrapping Logic
+
 - **What I asked:** Update the flow to ensure required Snowflake objects exist before loading data.
 - **What the agent produced:** An additional `ensure_snowflake_objects` task that creates the table and stage if they do not exist.
 - **What worked:** The pipeline became idempotent and self-sufficient, verifying the environment before executing API calls.
@@ -55,10 +57,12 @@ Output: Complete code for web_analytics_flow.py and a technical implementation s
 **If no, what broke?** The initial version did not include logic to create required Snowflake objects. It assumed a pre-initialized database, which caused a failure during the first execution.
 
 **Percentage of final code written by the agent vs. you:**
+
 - Agent wrote: 95%
 - I wrote/modified: 5%
 
 **Key files the agent created or modified:**
+
 - [web_analytics_flow.py]&#58; Implemented a five-task pipeline with retry logic, controlled cleanup, and detailed logging.
 
 ---
@@ -66,18 +70,22 @@ Output: Complete code for web_analytics_flow.py and a technical implementation s
 ## 5. What I Learned
 
 ### What the agent was good at:
+
 - Contextual understanding: The agent effectively used snowflake_objects.sql and agent-docs.md to map API data to the Snowflake schema.
 - Pattern generation: It produced correct Prefect task structures and handled Snowflake result processing reliably.
 
 ### What the agent struggled with:
+
 - Execution visibility: The abstraction of terminal commands made it difficult to verify what was happening during execution.
 - Defensive design: It initially assumed an existing database setup rather than building safeguards into the pipeline.
 
 ### What I would do differently next time:
+
 - Define constraints earlier: I would explicitly require environment validation and setup steps in the initial prompt.
 - Validate incrementally: I would test individual components before allowing the agent to assemble the full pipeline.
 
 ### Time comparison estimate:
+
 - **With agent:** 30 minutes
 - **Without agent (estimate):** 3 hours
 - **Net impact:** Significantly faster. The agent significantly reduced the time spent writing standard pipeline components. The prefect flow it built is robust and production ready.

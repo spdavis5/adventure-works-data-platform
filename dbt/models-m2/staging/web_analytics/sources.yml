@@ -1,0 +1,45 @@
+version: 2
+
+sources:
+  - name: web_analytics
+    database: CRICKET_DB
+    schema: RAW_EXT
+    description: "Raw clickstream events from the Web Analytics API"
+
+    config:
+      freshness:
+        warn_after: { count: 12, period: hour }
+        error_after: { count: 24, period: hour }
+      # Moved inside config to satisfy dbt 1.11
+      loaded_at_field: event_timestamp
+
+    tables:
+      - name: web_analytics_raw
+        columns:
+          - name: customer_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: ref('stg_adventure_db__customers')
+                    field: customer_id
+
+          - name: product_id
+            data_tests:
+              - not_null
+
+          - name: session_id
+            data_tests:
+              - not_null
+
+          - name: event_type
+            data_tests:
+              - not_null
+              - accepted_values:
+                  # Moved inside arguments to satisfy dbt 1.11
+                  arguments:
+                    values: ["page_view", "click", "add_to_cart", "purchase"]
+
+          - name: event_timestamp
+            data_tests:
+              - not_null
