@@ -1,39 +1,342 @@
 models:
   - name: stg_adventure_db__customers
+    description: >
+      Each row represents one customer from the Adventure database.
+      Grain: one row per customer. This staging model standardizes names,
+      contact fields, geography, and account information for downstream joins
+      and customer-level analysis. Join to order, campaign, chat, and analytics
+      models via customer_id to enrich event data with customer context.
     columns:
       - name: customer_id
+        description: >
+          Unique identifier for the customer. Primary key for this staging model.
+          Source: Adventure database customerid. Join to order, campaign, and
+          analytics models via customer_id to attach customer context.
         data_tests:
           - unique
           - not_null
+
       - name: first_name
+        description: >
+          Customer's first name as stored in the source system. Used for reporting
+          and customer-facing display names.
         data_tests:
           - not_null
+
+      - name: middle_name
+        description: >
+          Customer's middle name when available. Can be null if the source record
+          does not include one.
+
+      - name: last_name
+        description: >
+          Customer's last name as stored in the source system. Used together with
+          first_name and full_name for customer identity reporting.
+
+      - name: full_name
+        description: >
+          Full customer name from the source system. Useful for display, search,
+          and analyst-friendly reporting.
+
+      - name: email_address
+        description: >
+          Customer email address from the source system. Used for contact and
+          communication-related analysis. May be null or outdated depending on
+          the source record.
+
+      - name: address_line_1
+        description: >
+          First line of the customer's street address. Used for geographic and
+          contact analysis.
+
+      - name: address_line_2
+        description: >
+          Optional second line of the customer's street address. Can be null when
+          no additional address detail exists.
+
+      - name: city
+        description: >
+          Customer city from the source system. Used for location-based grouping
+          and geographic analysis.
+
+      - name: state_province
+        description: >
+          Customer state or province from the source system. Used for regional
+          analysis and location grouping.
+
+      - name: country_region
+        description: >
+          Customer country or region from the source system. Used for geographic
+          segmentation, country-level dashboards, and location-based joins.
+
+      - name: postal_code
+        description: >
+          Postal or ZIP code for the customer address. Useful for regional
+          analysis and location normalization.
+
+      - name: account_number
+        description: >
+          Account number assigned to the customer in the source system. Used as
+          an alternate business identifier when needed.
+
+      - name: territory_id
+        description: >
+          Identifier for the sales or service territory associated with the
+          customer. Used for territory-level reporting and segmentation.
+
+      - name: modified_date
+        description: >
+          Timestamp when the customer record was last modified in the source
+          system. Stored as provided by the source, with no explicit timezone
+          conversion in this staging model.
 
   - name: stg_adventure_db__inventory
+    description: >
+      Each row represents the inventory position of a product at a specific
+      location. Grain: one row per product and location combination. This staging
+      model prepares stock quantity data for inventory visibility and product
+      availability analysis. Join to stg_adventure_db__products via product_id
+      to connect inventory counts to product attributes.
+    columns:
+      - name: product_id
+        description: >
+          Identifier of the product stored in inventory. Foreign key to
+          stg_adventure_db__products.product_id. Join on product_id to connect
+          inventory counts to product details.
+      - name: location_id
+        description: >
+          Identifier of the storage location for this inventory record. Used to
+          analyze inventory distribution across facilities or warehouses.
+      - name: shelf
+        description: >
+          Shelf location code within the storage facility. Used for physical
+          warehouse organization and location analysis.
+      - name: bin
+        description: >
+          Bin location code within the storage facility. Used with shelf to
+          identify where product inventory is stored.
+      - name: quantity
+        description: >
+          Number of units currently on hand for this product at this location.
+          Used for stock availability, replenishment, and inventory analysis.
 
   - name: stg_adventure_db__vendors
+    description: >
+      Each row represents one vendor in the Adventure database. Grain: one row
+      per vendor. This staging model standardizes supplier information used for
+      vendor analysis and product sourcing workflows. Join to
+      stg_adventure_db__product_vendors via vendor_id to see which vendors supply
+      which products.
+    columns:
+      - name: vendor_id
+        description: >
+          Unique identifier for the vendor. Primary key for this staging model.
+          Source: Adventure database vendorid. Join to
+          stg_adventure_db__product_vendors.vendor_id to connect vendors to products.
+      - name: account_number
+        description: >
+          Vendor account number from the source system. Used as a business
+          identifier for procurement and supplier reporting.
+      - name: name
+        description: >
+          Vendor name from the source system. Used for reporting and supplier
+          identification.
+      - name: credit_rating
+        description: >
+          Credit rating assigned to the vendor by the source system. Used to
+          evaluate vendor risk and supplier quality.
+      - name: preferred_vendor_status
+        description: >
+          Flag indicating whether the vendor is marked as preferred in the
+          source system. Used for supplier prioritization and procurement logic.
+      - name: active_flag
+        description: >
+          Flag indicating whether the vendor is active in the source system.
+          Used to filter vendors that are currently available for procurement.
+      - name: purchasing_webservice_url
+        description: >
+          URL for the vendor's purchasing web service, if provided. Useful for
+          systems integration and vendor automation.
+      - name: modified_date
+        description: >
+          Timestamp when the vendor record was last modified in the source
+          system. Stored as provided by the source, with no explicit timezone
+          conversion in this staging model.
 
   - name: stg_ecom__email_campaigns
+    description: >
+      Each row represents one marketing event from the e-commerce campaign data.
+      Grain: one row per event_id after deduplicating overlapping records from the
+      legacy and newer campaign sources. This staging model combines campaign data
+      from both raw sources, standardizes the event fields, and preserves the
+      business details needed for attribution analysis. Join to
+      stg_adventure_db__customers via customer_id and to
+      stg_ecom__sales_orders via order_id to study campaign-driven conversions.
     columns:
+      - name: campaign_id
+        description: >
+          Identifier for the marketing campaign associated with this event. The
+          value encodes campaign attributes separated by tildes, which are split
+          into customer_segment, product_category, and ad_strategy in this model.
+          Used to trace campaign performance and attribution.
       - name: event_id
-        data_tests:
-          - unique
+        description: >
+          Unique identifier for the marketing event. Primary key for this staging
+          model after deduplication. Source: e-commerce campaign event record.
+      - name: event_date
+        description: >
+          Timestamp when the marketing event occurred. Parsed from the source
+          event date string and stored as a Snowflake timestamp without explicit
+          timezone conversion in this staging model. Used for event ordering and
+          campaign performance analysis.
       - name: event_type
+        description: >
+          Type of campaign event recorded in the source data. Expected values are
+          email_opened, add_to_cart, conversion, and email_clicked. Used to
+          classify user behavior within a campaign.
         data_tests:
           - accepted_values:
               arguments:
-                values: ['email_opened','add_to_cart','conversion', 'email_clicked']
+                values:
+                  ["email_opened", "add_to_cart", "conversion", "email_clicked"]
+
       - name: customer_id
+        description: >
+          Identifier of the customer associated with the marketing event.
+          Foreign key to stg_adventure_db__customers.customer_id. Join to customer
+          data to analyze campaign behavior by customer segment and geography.
         data_tests:
           - relationships:
               arguments:
                 to: ref('stg_adventure_db__customers')
                 field: customer_id
+
       - name: order_id
+        description: >
+          Identifier of the sales order associated with the event when a
+          conversion or purchase can be linked. Foreign key to
+          stg_ecom__sales_orders.sales_order_id. Null when the event was not tied
+          to an order.
         data_tests:
           - relationships:
               arguments:
                 to: ref('stg_ecom__sales_orders')
                 field: sales_order_id
 
+      - name: product_id
+        description: >
+          Identifier of the product associated with the campaign event. Used to
+          connect campaign activity to product performance. Can be null when the
+          event is not tied to a specific product.
+      - name: customer_segment
+        description: >
+          Customer segment derived from the campaign_id field. This is the first
+          portion of the encoded campaign identifier and is used to group events
+          by audience segment.
+      - name: product_category
+        description: >
+          Product category derived from the campaign_id field. This is the second
+          portion of the encoded campaign identifier and is used for product-level
+          campaign analysis.
+      - name: ad_strategy
+        description: >
+          Advertising strategy derived from the campaign_id field. This is the
+          third portion of the encoded campaign identifier and is used to compare
+          marketing approaches.
+      - name: is_converted
+        description: >
+          Flag indicating whether the campaign event is associated with a linked
+          order. A value of 1 means an order_id is present; 0 means no order was
+          linked. Used for conversion analysis.
+
   - name: stg_adventure_db__products
+    description: >
+      Each row represents one active product from the Adventure database.
+      Grain: one row per product. This staging model filters out discontinued
+      products and standardizes product attributes for downstream sales, inventory,
+      and vendor analysis. Join to inventory, product-vendor, and sales order
+      models via product_id to analyze product performance across the pipeline.
+    columns:
+      - name: product_id
+        description: >
+          Unique identifier for the product. Primary key for this staging model.
+          Source: Adventure database productid. Join to inventory, vendor, and
+          sales models via product_id.
+      - name: product_name
+        description: >
+          Human-readable product name from the source system. Used in reporting,
+          dashboards, and product-level analysis.
+      - name: product_number
+        description: >
+          Business product number from the source system. Useful as an alternate
+          product identifier in reports and operational workflows.
+      - name: color
+        description: >
+          Product color as stored in the source system. Used for product
+          segmentation and catalog analysis.
+      - name: standard_cost
+        description: >
+          Standard cost of the product in the source system. Used for margin and
+          profitability analysis.
+      - name: list_price
+        description: >
+          List price of the product in the source system. Used for pricing and
+          revenue analysis.
+      - name: size
+        description: >
+          Product size value from the source system. Interpreted together with
+          size_measure to understand the unit of measure.
+      - name: size_measure
+        description: >
+          Unit of measure for the size field. Provides context for the size value
+          so analysts can interpret the measurement correctly.
+      - name: weight
+        description: >
+          Product weight value from the source system. Interpreted together with
+          weight_measure to understand the unit of measure.
+      - name: weight_measure
+        description: >
+          Unit of measure for the weight field. Provides context for the weight
+          value so analysts can interpret the measurement correctly.
+      - name: product_line
+        description: >
+          Product line classification from the source system. Used for catalog
+          segmentation and product family analysis.
+      - name: class
+        description: >
+          Product class from the source system. Used as a higher-level product
+          grouping for reporting and segmentation.
+      - name: style
+        description: >
+          Product style from the source system. Used for catalog grouping and
+          style-based analysis.
+      - name: product_category
+        description: >
+          Product category from the source system. Used for category-level sales
+          and inventory reporting.
+      - name: product_subcategory
+        description: >
+          Product subcategory from the source system. Used to break down product
+          performance into more detailed product groupings.
+      - name: product_model
+        description: >
+          Product model name from the source system. Useful for product family
+          analysis and catalog reporting.
+      - name: sell_start_date
+        description: >
+          Date when the product became available for sale in the source system.
+          Used for product lifecycle analysis.
+      - name: sell_end_date
+        description: >
+          Date when the product stopped being sold in the source system. This
+          model filters out records where sell_end_date is populated, so this
+          field is expected to be null for rows that remain.
+      - name: discontinued_date
+        description: >
+          Date when the product was discontinued in the source system. Used to
+          understand product lifecycle and catalog changes.
+      - name: modified_date
+        description: >
+          Timestamp when the product record was last modified in the source
+          system. Stored as provided by the source, with no explicit timezone
+          conversion in this staging model.
