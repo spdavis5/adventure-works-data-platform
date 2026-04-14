@@ -1,3 +1,5 @@
+version: 2
+
 models:
   - name: stg_adventure_db__customers
     description: >
@@ -223,11 +225,6 @@ models:
                 to: ref('stg_ecom__sales_orders')
                 field: sales_order_id
 
-      - name: product_id
-        description: >
-          Identifier of the product associated with the campaign event. Used to
-          connect campaign activity to product performance. Can be null when the
-          event is not tied to a specific product.
       - name: customer_segment
         description: >
           Customer segment derived from the campaign_id field. This is the first
@@ -248,6 +245,138 @@ models:
           Flag indicating whether the campaign event is associated with a linked
           order. A value of 1 means an order_id is present; 0 means no order was
           linked. Used for conversion analysis.
+
+  - name: stg_ecom__sales_orders
+    description: >
+      Each row represents one sales order from the combined e-commerce and
+      real-time order feeds. Grain: one row per sales order. This staging model
+      unions legacy batch orders (via base_ecom__sales_orders) with real-time
+      streaming orders (via stg_real_time__sales_orders), converts the
+      delivery_estimate text into delivery_estimate_days, and resolves the
+      shipping method from the ship_method seed reference table. Join to
+      stg_adventure_db__customers via customer_id for customer context, and to
+      int_sales_order_line_items via sales_order_id for line-item details. The
+      nested order_details array preserves the product-level structure needed
+      for downstream flattening.
+    columns:
+      - name: sales_order_id
+        description: >
+          Unique identifier for the sales order. Primary key for this staging
+          model. Use this field to join to line-item and attribution models at
+          the order grain.
+      - name: customer_id
+        description: >
+          Identifier of the customer who placed the order. Foreign key to
+          stg_adventure_db__customers.customer_id. Join on this field to bring
+          in customer name, geography, and contact details.
+      - name: account_number
+        description: >
+          Account number associated with the customer on the order. Alternate
+          business identifier that can be used for finance and customer-service
+          lookups.
+      - name: bill_to_address_id
+        description: >
+          Identifier for the billing address attached to the order. Used for
+          invoice and billing-related reporting.
+      - name: comment
+        description: >
+          Free-text note attached to the order in the source system. May be null.
+      - name: credit_card_approval_code
+        description: >
+          Payment authorization code recorded for the order. Used to trace card
+          approval activity when available.
+      - name: credit_card_id
+        description: >
+          Identifier for the credit card used on the order. Can be null when no
+          card was stored or the payment method was not card-based.
+      - name: currency_rate_id
+        description: >
+          Identifier for the currency conversion rate applied to the order, when
+          one exists. Used for financial reporting across currencies.
+      - name: delivery_estimate_days
+        description: >
+          Estimated delivery time expressed as a number of days, derived from the
+          source delivery_estimate text. For example, a value like '2 days'
+          becomes 2 and a value like '1 week' becomes 7. Null when no estimate
+          is available.
+      - name: due_date
+        description: >
+          Date and time the order is due, as provided by the source system. Used
+          for fulfillment and on-time delivery analysis.
+      - name: freight
+        description: >
+          Shipping and handling charge for the order. Used in fulfillment and
+          total-order-value analysis.
+      - name: modified_date
+        description: >
+          Timestamp when the order record was last modified in the source system.
+          Stored as provided by the source, with no explicit timezone conversion
+          in this staging model.
+      - name: online_order_flag
+        description: >
+          Flag indicating whether the order was placed online. A value of 1 means
+          online; 0 means non-online or manual entry. Used for channel-mix
+          analysis.
+      - name: order_date
+        description: >
+          Timestamp when the order was placed. Used for time-based analysis such
+          as daily sales, weekly trends, and month-over-month revenue reporting.
+      - name: order_details
+        description: >
+          Nested array of line-item objects for the order. This field preserves
+          the product-level structure needed for downstream flattening into
+          line-item analysis.
+      - name: purchase_order_number
+        description: >
+          Purchase order number associated with the sales order, when present.
+          Useful for reconciliation with external procurement or billing systems.
+      - name: revision_number
+        description: >
+          Revision number for the order record in the source system. Used to
+          track how many times the order has been updated.
+      - name: sales_order_number
+        description: >
+          Human-readable order number from the source system. Useful for
+          reporting and customer-service lookup.
+      - name: sales_person_id
+        description: >
+          Identifier for the salesperson assigned to the order. Used for sales
+          attribution and performance reporting.
+      - name: ship_date
+        description: >
+          Date and time the order was shipped, when available. Used to analyze
+          fulfillment speed and shipping performance.
+      - name: shipping_method
+        description: >
+          Human-readable shipping method name resolved from the ship_method
+          seed reference table. Used to analyze fulfillment preferences and
+          delivery behavior.
+      - name: ship_to_address_id
+        description: >
+          Identifier for the shipping address attached to the order. Used for
+          delivery and logistics analysis.
+      - name: status
+        description: >
+          Current order status code from the source system. The numeric value
+          indicates where the order sits in the fulfillment lifecycle. Used to
+          filter valid orders in downstream reporting.
+      - name: sub_total
+        description: >
+          Order subtotal before tax, shipping, and other adjustments. Used for
+          revenue analysis and to understand the base value of an order.
+      - name: tax_amt
+        description: >
+          Tax amount applied to the order. Used together with sub_total and
+          freight to calculate the full order value.
+      - name: territory_id
+        description: >
+          Identifier for the sales territory associated with the order. Used
+          for territory-level sales reporting.
+      - name: total_due
+        description: >
+          Final amount due for the order after sub_total, tax, and freight are
+          combined. This is the primary order-value field used in revenue
+          analysis.
 
   - name: stg_adventure_db__products
     description: >
@@ -340,3 +469,1028 @@ models:
           Timestamp when the product record was last modified in the source
           system. Stored as provided by the source, with no explicit timezone
           conversion in this staging model.
+
+  - name: stg_adventure_db__product_vendors
+    description: >
+      Each row represents one product-vendor supply relationship from the
+      Adventure database. Grain: one row per product per vendor combination.
+      This staging model standardizes pricing, lead-time, and order-quantity
+      fields for vendor-sourcing and procurement analysis. Join to
+      stg_adventure_db__products via product_id for product details, and to
+      stg_adventure_db__vendors via vendor_id for vendor details.
+    columns:
+      - name: product_id
+        description: >
+          Identifier of the product in this supply relationship. Foreign key
+          to stg_adventure_db__products.product_id. Join on this field to
+          connect vendor supply data to product attributes such as name,
+          category, and pricing.
+      - name: vendor_id
+        description: >
+          Identifier of the vendor who supplies this product. Foreign key to
+          stg_adventure_db__vendors.vendor_id. Join on this field to access
+          vendor name, credit rating, and active status.
+      - name: average_lead_time
+        description: >
+          Average number of days between placing an order with this vendor
+          and receiving the product. Used for supply-chain planning and
+          vendor performance analysis.
+      - name: standard_price
+        description: >
+          Standard purchase price charged by this vendor for the product.
+          Used for cost analysis and comparison across vendors.
+      - name: last_receipt_cost
+        description: >
+          Cost recorded on the most recent receipt of this product from the
+          vendor. Useful for tracking price changes over time.
+      - name: last_receipt_date
+        description: >
+          Date of the most recent receipt of this product from the vendor.
+          Used to assess how recently the vendor has fulfilled orders.
+      - name: min_order_qty
+        description: >
+          Minimum order quantity required by the vendor for this product.
+          Used for procurement planning and order-size constraints.
+      - name: max_order_qty
+        description: >
+          Maximum order quantity the vendor can fulfill for this product in
+          a single order. Used for procurement planning.
+      - name: on_order_qty
+        description: >
+          Quantity of this product currently on order from the vendor.
+          Used for inventory planning and outstanding-purchase tracking.
+      - name: measurement
+        description: >
+          Unit of measure for the product as supplied by this vendor,
+          resolved from the source unit-measure code via the measures seed.
+          Provides context for interpreting quantity and pricing fields.
+      - name: modified_date
+        description: >
+          Timestamp when this product-vendor record was last modified in the
+          source system. Stored as provided by the source, with no explicit
+          timezone conversion in this staging model.
+
+  - name: stg_ecom__purchase_orders
+    description: >
+      Each row represents one purchase order placed with a vendor in the
+      e-commerce system. Grain: one row per purchase order detail line.
+      This staging model extracts and flattens semi-structured purchase
+      order data from the raw source, standardizes field names, and resolves
+      the shipping method from the seed reference table. Join to
+      stg_adventure_db__vendors via vendor_id for vendor details, and to
+      stg_adventure_db__products via product_id for product attributes.
+    columns:
+      - name: employee_id
+        description: >
+          Identifier of the employee who created or is responsible for this
+          purchase order. Used for procurement accountability reporting.
+      - name: freight
+        description: >
+          Shipping and handling charge for this purchase order. Used in
+          total-cost-of-goods and logistics analysis.
+      - name: order_date
+        description: >
+          Timestamp when the purchase order was placed. Used for procurement
+          lead-time analysis and order-volume trends over time.
+      - name: order_details
+        description: >
+          Raw nested variant containing the full order detail structure from
+          the source system. Individual detail fields are extracted into
+          their own columns in this model; this column is retained for
+          reference and debugging.
+      - name: due_date
+        description: >
+          Date by which the ordered goods are expected to be received.
+          Extracted from the nested order details. Used for vendor delivery
+          performance tracking.
+      - name: line_total
+        description: >
+          Total dollar amount for this order detail line, calculated as
+          order_qty multiplied by unit_price. Used for purchase spend
+          analysis at the line-item level.
+      - name: order_qty
+        description: >
+          Number of units ordered for this product on this purchase order
+          line. Used for procurement volume analysis.
+      - name: product_id
+        description: >
+          Identifier of the product being purchased. Foreign key to
+          stg_adventure_db__products.product_id. Join on this field to
+          access product name, category, and cost information.
+      - name: purchase_order_detail_id
+        description: >
+          Unique identifier for this purchase order detail line. Part of the
+          composite key for this model alongside purchase_order_id. Source:
+          raw PurchaseOrderDetailID.
+      - name: received_qty
+        description: >
+          Number of units actually received for this line. Compare to
+          order_qty to assess fulfillment accuracy and vendor reliability.
+      - name: rejected_qty
+        description: >
+          Number of units rejected upon receipt for this line, due to quality
+          or other issues. Used for vendor quality analysis.
+      - name: stocked_qty
+        description: >
+          Number of units accepted and placed into inventory for this line.
+          Equals received_qty minus rejected_qty. Used for inventory
+          replenishment tracking.
+      - name: unit_price
+        description: >
+          Price per unit for this product on this purchase order line, in the
+          source currency. Used for cost and margin analysis.
+      - name: purchase_order_id
+        description: >
+          Unique identifier for the purchase order. Groups one or more detail
+          lines under a single procurement transaction. Used as a key for
+          order-level aggregation.
+      - name: revision_number
+        description: >
+          Revision number of the purchase order. Increments when the order is
+          amended. Used to track order modifications over time.
+      - name: ship_date
+        description: >
+          Timestamp when the purchase order was shipped by the vendor. Used
+          for delivery performance and lead-time analysis.
+      - name: shipping_method
+        description: >
+          Shipping method name resolved from the ship_method seed reference
+          table. Describes how the purchased goods are delivered.
+      - name: status
+        description: >
+          Numeric status code for the purchase order. Indicates the order's
+          position in the procurement lifecycle (e.g., pending, approved,
+          received). Used for filtering and workflow analysis.
+      - name: subtotal
+        description: >
+          Purchase order subtotal before tax and freight. Used for
+          procurement spend analysis.
+      - name: tax_amt
+        description: >
+          Tax amount applied to the purchase order. Combined with subtotal
+          and freight to calculate total_due.
+      - name: total_due
+        description: >
+          Final amount due for the purchase order after subtotal, tax, and
+          freight. Primary field for total procurement spend reporting.
+      - name: vendor_id
+        description: >
+          Identifier of the vendor who received this purchase order. Foreign
+          key to stg_adventure_db__vendors.vendor_id. Join on this field to
+          access vendor name, credit rating, and preferred status.
+
+  - name: stg_real_time__chat_logs
+    description: >
+      Each row represents one customer support chat session from the
+      real-time MongoDB source. Grain: one row per chat session. This staging
+      model extracts fields from the raw semi-structured chat document and
+      standardizes them for downstream customer-service analytics. Join to
+      stg_adventure_db__customers via customer_id to enrich chat data with
+      customer details.
+    columns:
+      - name: chat_id
+        description: >
+          Unique identifier for this chat session. Primary key. Source:
+          MongoDB document _id converted to a string.
+      - name: customer_id
+        description: >
+          Identifier of the customer who initiated or is associated with
+          this chat session. Foreign key to
+          stg_adventure_db__customers.customer_id. Join on this field to
+          access customer name, geography, and contact information.
+      - name: session_start
+        description: >
+          Timestamp when the chat session began. Source: MongoDB
+          chat_start_time field. Used for session-duration calculation and
+          time-of-day support analysis.
+      - name: session_end
+        description: >
+          Timestamp when the chat session ended. Source: MongoDB
+          chat_completion_time field. Used together with session_start to
+          calculate session duration and support response metrics.
+      - name: ticket_description
+        description: >
+          Free-text description of the support ticket or issue discussed in
+          the chat session. Used for text analysis, topic categorization,
+          and customer-service reporting.
+      - name: rating
+        description: >
+          Customer satisfaction rating provided at the end of the chat
+          session. Integer value; higher values indicate greater
+          satisfaction. Used for customer-service quality analysis and
+          agent performance metrics.
+      - name: last_modified
+        description: >
+          Timestamp when the chat record was last modified in the source
+          system. Used for incremental processing and data freshness checks.
+
+  - name: stg_real_time__sales_orders
+    description: >
+      Each row represents one sales order from the real-time streaming
+      source. Grain: one row per order. This staging model combines header
+      fields from base_real_time__sales_orders with an aggregated array of
+      line-item details from base_real_time__order_details, producing a
+      structure parallel to stg_ecom__sales_orders. The two staging sales-
+      order models are unified downstream. Join to
+      stg_adventure_db__customers via customer_id for customer context.
+    columns:
+      - name: sales_order_id
+        description: >
+          Unique identifier for this sales order. Primary key. Used to join
+          to downstream intermediate models and to match with the batch
+          sales order source.
+      - name: customer_id
+        description: >
+          Identifier of the customer who placed this order. Foreign key to
+          stg_adventure_db__customers.customer_id. Join on this field to
+          access customer name, email, and geographic details.
+      - name: account_number
+        description: >
+          Account number associated with the order in the source system.
+          Used as an alternate business identifier.
+      - name: bill_to_address_id
+        description: >
+          Identifier of the billing address for this order. Used for
+          billing and geographic analysis. Can be null when the source
+          value is missing or invalid.
+      - name: comment
+        description: >
+          Free-text comment attached to the order. Can be null when no
+          comment was provided.
+      - name: credit_card_approval_code
+        description: >
+          Approval code returned by the credit-card processor. Can be null
+          for orders not paid by credit card.
+      - name: credit_card_id
+        description: >
+          Identifier of the credit card used for this order. Can be null
+          for non-credit-card payments.
+      - name: currency_rate_id
+        description: >
+          Identifier of the currency exchange rate applied to this order.
+          Can be null when the order uses the base currency.
+      - name: delivery_estimate
+        description: >
+          Estimated delivery date for the order. Set to null in this
+          real-time source because the streaming system does not provide
+          delivery estimates.
+      - name: due_date
+        description: >
+          Date by which the order is due to be fulfilled. Used for
+          fulfillment tracking and on-time delivery analysis.
+      - name: freight
+        description: >
+          Shipping and handling charge for the order. Used in total-order-
+          value calculations and fulfillment cost analysis.
+      - name: modified_date
+        description: >
+          Timestamp when the order record was last modified. Derived from
+          the source last_modified field. Used for incremental processing
+          and data freshness tracking.
+      - name: online_order_flag
+        description: >
+          Flag indicating whether the order was placed online. A value of 1
+          means online; 0 means placed through another channel. Used for
+          channel-mix analysis.
+      - name: order_date
+        description: >
+          Timestamp when the order was placed. Used for time-based analysis
+          such as daily sales volume, weekly trends, and revenue reporting.
+      - name: order_details
+        description: >
+          Aggregated array of line-item detail objects for this order. Each
+          element contains SalesOrderDetailID, OrderQty, ProductID,
+          UnitPrice, and LineTotal. Flatten this field downstream (e.g., in
+          int_sales_order_line_items) for product-level analysis.
+      - name: purchase_order_number
+        description: >
+          Purchase order number associated with this sales order, if
+          applicable. Can be null for consumer orders without a PO.
+      - name: revision_number
+        description: >
+          Revision number of the order. Increments when the order is
+          amended in the source system.
+      - name: sales_order_number
+        description: >
+          Human-readable order number from the source system. Used as a
+          business-friendly reference for the order.
+      - name: sales_person_id
+        description: >
+          Identifier of the salesperson associated with this order. Used
+          for sales-rep performance analysis.
+      - name: ship_date
+        description: >
+          Timestamp when the order was shipped. Used for fulfillment time
+          calculations and delivery analysis.
+      - name: ship_method_id
+        description: >
+          Identifier of the shipping method for this order. Can be resolved
+          via the ship_method seed to get the human-readable shipping
+          method name.
+      - name: ship_to_address_id
+        description: >
+          Identifier of the shipping destination address. Used for
+          geographic and logistics analysis.
+      - name: status
+        description: >
+          Numeric status code for the order. Indicates the order's position
+          in the fulfillment lifecycle (e.g., pending, shipped, delivered,
+          cancelled). Used for filtering valid orders in downstream models.
+      - name: sub_total
+        description: >
+          Order subtotal before tax and freight. Used for revenue analysis
+          and understanding the base order value.
+      - name: tax_amt
+        description: >
+          Tax amount applied to the order. Combined with sub_total and
+          freight to derive total_due.
+      - name: territory_id
+        description: >
+          Identifier of the sales territory associated with this order.
+          Used for territory-level reporting and regional analysis.
+      - name: total_due
+        description: >
+          Final amount due for the order after sub_total, tax, and freight.
+          Primary field for order-level revenue reporting.
+
+  - name: int_sales_order_line_items
+    description: >
+      Each row represents one product line item within a sales order,
+      created by flattening the nested order_details array from
+      stg_ecom__sales_orders. Grain: one row per product per order. This
+      intermediate model is the foundation for product-level revenue
+      analysis and order composition reporting. Join to
+      stg_adventure_db__products via product_id for product attributes.
+      Upstream: stg_ecom__sales_orders.
+    columns:
+      - name: sales_order_id
+        description: >
+          Identifier of the sales order this line item belongs to. Foreign
+          key to stg_ecom__sales_orders.sales_order_id. Multiple line items
+          share the same sales_order_id (one per product in the order).
+      - name: customer_id
+        description: >
+          Identifier of the customer who placed the order containing this
+          line item. Carried forward from stg_ecom__sales_orders. Foreign
+          key to stg_adventure_db__customers.customer_id.
+      - name: order_date
+        description: >
+          Timestamp when the parent order was placed. Carried forward from
+          stg_ecom__sales_orders for convenience in time-based line-item
+          analysis without needing an additional join.
+      - name: sales_order_detail_id
+        description: >
+          Unique identifier for this individual line item within the order.
+          Source: SalesOrderDetailID from the nested order detail array.
+          Part of the composite primary key alongside sales_order_id.
+      - name: carrier_tracking_number
+        description: >
+          Tracking number assigned by the shipping carrier for this line
+          item, when available. Can be null if the item has not yet shipped
+          or tracking is not provided.
+      - name: order_qty
+        description: >
+          Number of units of this product ordered in this line item. Always
+          a positive integer. Used to calculate line-item revenue
+          (order_qty × unit_price).
+      - name: product_id
+        description: >
+          Identifier of the product purchased in this line item. Foreign
+          key to stg_adventure_db__products.product_id. Join on this field
+          to access product name, category, cost, and vendor information.
+      - name: special_offer_id
+        description: >
+          Identifier of any special offer or promotion applied to this line
+          item. Used for promotional-effectiveness and discount analysis.
+      - name: unit_price
+        description: >
+          Price per unit of this product at the time of purchase, in the
+          source currency. May differ from the product's current list price
+          due to promotions or price changes.
+      - name: unit_price_discount
+        description: >
+          Discount amount applied per unit on this line item. A value of
+          zero means no discount was applied. Used for promotional and
+          margin analysis.
+      - name: line_total
+        description: >
+          Total dollar amount for this line item after quantity and discount
+          adjustments. Primary field for product-level revenue reporting.
+      - name: line_item_modified_date
+        description: >
+          Timestamp when this line-item record was last modified in the
+          source system. Stored as provided by the source.
+
+  - name: int_sales_order_with_customers
+    description: >
+      Each row represents one sales order enriched with customer identity
+      fields. Grain: one row per sales order. This intermediate model joins
+      stg_ecom__sales_orders to stg_adventure_db__customers so analysts can
+      work with order and customer attributes in one record. Join to
+      int_sales_order_line_items via sales_order_id when you need line-item
+      detail.
+    columns:
+      - name: sales_order_id
+        description: >
+          Unique identifier for the sales order. Primary key for the order
+          grain. Inherited from stg_ecom__sales_orders.
+      - name: customer_id
+        description: >
+          Identifier of the customer who placed the order. Foreign key to
+          stg_adventure_db__customers.customer_id. The join is already
+          performed in this model.
+      - name: account_number
+        description: >
+          Account number associated with the customer on the order. Inherited
+          from stg_ecom__sales_orders.
+      - name: bill_to_address_id
+        description: >
+          Identifier for the billing address attached to the order. Inherited
+          from stg_ecom__sales_orders.
+      - name: comment
+        description: >
+          Free-text note attached to the order. May be null. Inherited from
+          stg_ecom__sales_orders.
+      - name: credit_card_approval_code
+        description: >
+          Payment authorization code recorded for the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: credit_card_id
+        description: >
+          Identifier for the stored credit card used on the order, when one
+          exists. Inherited from stg_ecom__sales_orders.
+      - name: currency_rate_id
+        description: >
+          Identifier for the exchange-rate record applied to the order, when
+          one exists. Inherited from stg_ecom__sales_orders.
+      - name: delivery_estimate_days
+        description: >
+          Estimated delivery time expressed as a number of days, derived from
+          the source delivery_estimate text. Inherited from
+          stg_ecom__sales_orders.
+      - name: due_date
+        description: >
+          Date and time the order is due, as provided by the source system.
+          Inherited from stg_ecom__sales_orders.
+      - name: freight
+        description: >
+          Shipping and handling charge for the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: modified_date
+        description: >
+          Timestamp when the order record was last modified in the source
+          system. Inherited from stg_ecom__sales_orders.
+      - name: online_order_flag
+        description: >
+          Flag indicating whether the order was placed online. A value of 1
+          means online; 0 means non-online or manual entry. Inherited from
+          stg_ecom__sales_orders.
+      - name: order_date
+        description: >
+          Timestamp when the order was placed. Inherited from
+          stg_ecom__sales_orders. Used for time-based analysis.
+      - name: order_details
+        description: >
+          Nested array of line-item objects for the order. Inherited from
+          stg_ecom__sales_orders. Flatten downstream for product-level analysis.
+      - name: purchase_order_number
+        description: >
+          Purchase order number associated with the sales order, when present.
+          Inherited from stg_ecom__sales_orders.
+      - name: revision_number
+        description: >
+          Revision number for the order record in the source system. Inherited
+          from stg_ecom__sales_orders.
+      - name: sales_order_number
+        description: >
+          Human-readable order number from the source system. Inherited from
+          stg_ecom__sales_orders.
+      - name: sales_person_id
+        description: >
+          Identifier for the salesperson assigned to the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: ship_date
+        description: >
+          Date and time the order was shipped, when available. Inherited from
+          stg_ecom__sales_orders.
+      - name: shipping_method
+        description: >
+          Human-readable shipping method name resolved from the ship_method
+          reference table. Inherited from stg_ecom__sales_orders.
+      - name: ship_to_address_id
+        description: >
+          Identifier for the shipping address attached to the order. Inherited
+          from stg_ecom__sales_orders.
+      - name: status
+        description: >
+          Current order status code from the source system. Inherited from
+          stg_ecom__sales_orders.
+      - name: sub_total
+        description: >
+          Order subtotal before tax, shipping, and other adjustments. Inherited
+          from stg_ecom__sales_orders.
+      - name: tax_amt
+        description: >
+          Tax amount applied to the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: territory_id
+        description: >
+          Identifier for the sales territory associated with the order.
+          Inherited from stg_ecom__sales_orders.
+      - name: total_due
+        description: >
+          Final amount due for the order after sub_total, tax, and freight are
+          combined. Inherited from stg_ecom__sales_orders.
+      - name: customer_name
+        description: >
+          Full customer name assembled from the customer first and last name
+          fields. Useful for reporting and analyst-friendly browsing.
+      - name: email_address
+        description: >
+          Customer email address brought in from the customer dimension for
+          direct contact and analysis.
+      - name: country
+        description: >
+          Customer country or region brought in from the customer dimension
+          (sourced from country_region). Used for geographic segmentation and
+          country-level order reporting.
+
+  - name: int_sales_orders_with_campaign
+    description: >
+      Each row represents one sales order enriched with campaign attribution
+      fields. Grain: one row per sales order. This intermediate model joins
+      stg_ecom__sales_orders to the conversion events in
+      stg_ecom__email_campaigns so analysts can see which orders were linked
+      to marketing activity. Upstream: stg_ecom__sales_orders and
+      stg_ecom__email_campaigns (filtered to conversion events only). Join to
+      int_sales_order_line_items via sales_order_id for product-level detail.
+    columns:
+      - name: sales_order_id
+        description: >
+          Unique identifier for the sales order. Primary key for the order
+          grain. Inherited from stg_ecom__sales_orders.
+      - name: customer_id
+        description: >
+          Identifier of the customer who placed the order. Foreign key to
+          stg_adventure_db__customers.customer_id. Inherited from
+          stg_ecom__sales_orders.
+      - name: account_number
+        description: >
+          Account number associated with the customer on the order. Inherited
+          from stg_ecom__sales_orders.
+      - name: bill_to_address_id
+        description: >
+          Identifier for the billing address attached to the order. Inherited
+          from stg_ecom__sales_orders.
+      - name: comment
+        description: >
+          Free-text note attached to the order. May be null. Inherited from
+          stg_ecom__sales_orders.
+      - name: credit_card_approval_code
+        description: >
+          Payment authorization code recorded for the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: credit_card_id
+        description: >
+          Identifier for the stored credit card used on the order, when one
+          exists. Inherited from stg_ecom__sales_orders.
+      - name: currency_rate_id
+        description: >
+          Identifier for the exchange-rate record applied to the order, when
+          one exists. Inherited from stg_ecom__sales_orders.
+      - name: delivery_estimate_days
+        description: >
+          Estimated delivery time expressed as a number of days, derived from
+          the source delivery_estimate text. Inherited from
+          stg_ecom__sales_orders.
+      - name: due_date
+        description: >
+          Date and time the order is due, as provided by the source system.
+          Inherited from stg_ecom__sales_orders.
+      - name: freight
+        description: >
+          Shipping and handling charge for the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: modified_date
+        description: >
+          Timestamp when the order record was last modified in the source
+          system. Inherited from stg_ecom__sales_orders.
+      - name: online_order_flag
+        description: >
+          Flag indicating whether the order was placed online. A value of 1
+          means online; 0 means non-online or manual entry. Inherited from
+          stg_ecom__sales_orders.
+      - name: order_date
+        description: >
+          Timestamp when the order was placed. Inherited from
+          stg_ecom__sales_orders.
+      - name: order_details
+        description: >
+          Nested array of line-item objects for the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: purchase_order_number
+        description: >
+          Purchase order number associated with the sales order, when present.
+          Inherited from stg_ecom__sales_orders.
+      - name: revision_number
+        description: >
+          Revision number for the order record in the source system. Inherited
+          from stg_ecom__sales_orders.
+      - name: sales_order_number
+        description: >
+          Human-readable order number from the source system. Inherited from
+          stg_ecom__sales_orders.
+      - name: sales_person_id
+        description: >
+          Identifier for the salesperson assigned to the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: ship_date
+        description: >
+          Date and time the order was shipped, when available. Inherited from
+          stg_ecom__sales_orders.
+      - name: shipping_method
+        description: >
+          Human-readable shipping method name resolved from the ship_method
+          reference table. Inherited from stg_ecom__sales_orders.
+      - name: ship_to_address_id
+        description: >
+          Identifier for the shipping address attached to the order. Inherited
+          from stg_ecom__sales_orders.
+      - name: status
+        description: >
+          Current order status code from the source system. Inherited from
+          stg_ecom__sales_orders.
+      - name: sub_total
+        description: >
+          Order subtotal before tax, shipping, and other adjustments. Inherited
+          from stg_ecom__sales_orders.
+      - name: tax_amt
+        description: >
+          Tax amount applied to the order. Inherited from
+          stg_ecom__sales_orders.
+      - name: territory_id
+        description: >
+          Identifier for the sales territory associated with the order.
+          Inherited from stg_ecom__sales_orders.
+      - name: total_due
+        description: >
+          Final amount due for the order after sub_total, tax, and freight are
+          combined. Inherited from stg_ecom__sales_orders.
+      - name: campaign_id
+        description: >
+          Identifier for the marketing campaign linked to the conversion
+          event, when one exists. Foreign key to
+          stg_ecom__email_campaigns.campaign_id. Null when the order is not
+          attributed to any campaign.
+      - name: customer_segment
+        description: >
+          Customer segment parsed from the encoded campaign_id value. Null
+          when there is no campaign attribution. Used to analyze conversion
+          by audience.
+      - name: product_category
+        description: >
+          Product category parsed from the encoded campaign_id value. Null
+          when there is no campaign attribution. Used to analyze conversion
+          by product group.
+      - name: ad_strategy
+        description: >
+          Advertising strategy parsed from the encoded campaign_id value.
+          Null when there is no campaign attribution. Used to compare
+          marketing approaches.
+      - name: is_campaign_conversion
+        description: >
+          Flag indicating whether the order matched a conversion event from
+          the campaign table. A value of 1 means the order was linked to a
+          campaign event; 0 means no campaign match was found. Used to
+          segment campaign-driven versus organic revenue.
+
+  - name: base_ecom__email_campaigns
+    description: >
+      Each row represents one raw marketing event from the legacy e-commerce
+      campaign feed. Grain: one row per event_id. This base model normalizes
+      the raw JSON fields so the staging layer can deduplicate events across
+      the legacy and newer marketing sources. Downstream: feeds into
+      stg_ecom__email_campaigns.
+    columns:
+      - name: campaign_id
+        description: >
+          Campaign identifier from the raw source. Used to group events by
+          marketing campaign.
+      - name: event_id
+        description: >
+          Unique identifier for the marketing event. Primary key at the
+          raw-event grain.
+      - name: event_date
+        description: >
+          Timestamp when the marketing event occurred, parsed from the source
+          event date string using the DD-Mon-YYYY HH12.MI AM format.
+          Timezone is not explicitly converted in this base model.
+      - name: event_type
+        description: >
+          Type of marketing event recorded in the source. Values include
+          email_opened, add_to_cart, conversion, and email_clicked.
+      - name: customer_id
+        description: >
+          Identifier of the customer associated with the marketing event.
+          Used to connect campaign activity back to customer data.
+      - name: order_id
+        description: >
+          Identifier of the order associated with the event when a purchase
+          or conversion can be linked. Can be null.
+      - name: product_id
+        description: >
+          Identifier of the product associated with the event when one is
+          available. Can be null for events without a product.
+
+  - name: base_ecom__email_mktg_new
+    description: >
+      Each row represents one raw marketing event from the newer e-commerce
+      marketing feed. Grain: one row per event_id. This base model
+      standardizes the newer feed (whitespace-trimmed campaign_id, lowercased
+      event_type) so it can be unioned with the legacy campaign source and
+      deduplicated downstream. Downstream: feeds into
+      stg_ecom__email_campaigns.
+    columns:
+      - name: campaign_id
+        description: >
+          Campaign identifier from the raw source. Whitespace is removed in
+          this base model so campaign values are easier to match across feeds.
+      - name: event_id
+        description: >
+          Unique identifier for the marketing event. Primary key at the
+          raw-event grain.
+      - name: event_date
+        description: >
+          Timestamp when the marketing event occurred, parsed from the source
+          event date string using the DD-Mon-YYYY HH12.MI AM format.
+          Timezone is not explicitly converted in this base model.
+      - name: event_type
+        description: >
+          Type of marketing event recorded in the source. Converted to
+          lowercase for consistency with the legacy feed.
+      - name: customer_id
+        description: >
+          Identifier of the customer associated with the marketing event.
+          Used to connect campaign activity back to customer data.
+      - name: order_id
+        description: >
+          Identifier of the order associated with the event when a purchase
+          or conversion can be linked. Can be null.
+      - name: product_id
+        description: >
+          Identifier of the product associated with the event when one is
+          available. Can be null for events without a product.
+
+  - name: base_ecom__sales_orders
+    description: >
+      Each row represents one raw sales order from the e-commerce batch
+      source. Grain: one row per order. This base model converts the raw JSON
+      payload into typed columns and preserves the nested order_details
+      payload for downstream flattening. It is the source for
+      stg_ecom__sales_orders (legacy feed half of the union).
+    columns:
+      - name: sales_order_id
+        description: >
+          Unique identifier for the sales order in the source system. Primary
+          key at the order grain.
+      - name: customer_id
+        description: >
+          Identifier of the customer who placed the order. Used to connect
+          orders back to customer data.
+      - name: account_number
+        description: >
+          Account number associated with the customer on the order. Alternate
+          business identifier used by finance and support teams.
+      - name: bill_to_address_id
+        description: >
+          Identifier for the billing address attached to the order.
+      - name: comment
+        description: >
+          Free-text order comment from the source system. May be null.
+      - name: credit_card_approval_code
+        description: >
+          Payment authorization code recorded for the order.
+      - name: credit_card_id
+        description: >
+          Identifier for the stored credit card used on the order, when one
+          exists.
+      - name: currency_rate_id
+        description: >
+          Identifier for the exchange-rate record applied to the order, when
+          one exists.
+      - name: delivery_estimate
+        description: >
+          Free-text delivery estimate supplied by the source system. May
+          describe days or weeks until delivery. Converted to
+          delivery_estimate_days in the downstream staging model.
+      - name: due_date
+        description: >
+          Date and time the order is due, as provided by the source system.
+      - name: freight
+        description: >
+          Shipping and handling charge for the order.
+      - name: modified_date
+        description: >
+          Timestamp when the order record was last modified in the source
+          system.
+      - name: online_order_flag
+        description: >
+          Flag indicating whether the order was placed online. A value of 1
+          means online; 0 means non-online or manual entry.
+      - name: order_date
+        description: >
+          Timestamp when the order was placed.
+      - name: order_details
+        description: >
+          Nested order detail payload as stored by the source system. This is
+          the input used to flatten line items downstream.
+      - name: purchase_order_number
+        description: >
+          Purchase order number associated with the sales order, when present.
+      - name: revision_number
+        description: >
+          Revision number for the order record in the source system.
+      - name: sales_order_number
+        description: >
+          Human-readable order number from the source system.
+      - name: sales_person_id
+        description: >
+          Identifier for the salesperson assigned to the order.
+      - name: ship_date
+        description: >
+          Date and time the order was shipped, when available.
+      - name: ship_method_id
+        description: >
+          Identifier for the shipping method selected for the order. Joins to
+          the ship_method seed reference table.
+      - name: ship_to_address_id
+        description: >
+          Identifier for the shipping address attached to the order.
+      - name: status
+        description: >
+          Current order status code from the source system. The numeric value
+          indicates where the order sits in the fulfillment lifecycle.
+      - name: sub_total
+        description: >
+          Order subtotal before tax, shipping, and other adjustments.
+      - name: tax_amt
+        description: >
+          Tax amount applied to the order.
+      - name: territory_id
+        description: >
+          Identifier for the sales territory associated with the order.
+      - name: total_due
+        description: >
+          Final amount due for the order after subtotal, tax, and freight are
+          combined.
+
+  - name: base_real_time__order_details
+    description: >
+      Each row represents one raw sales order line item from the real-time
+      order-details feed. Grain: one row per sales_order_detail_id. This base
+      model types the raw order detail payload so it can be grouped and
+      reassembled into the order_details array in stg_real_time__sales_orders,
+      or flattened into line items downstream. Join to
+      base_real_time__sales_orders via sales_order_id and to products via
+      product_id.
+    columns:
+      - name: sales_order_detail_id
+        description: >
+          Unique identifier for the sales order line item. Primary key at the
+          line-item grain.
+      - name: sales_order_id
+        description: >
+          Identifier of the sales order that owns this line item. Foreign key
+          to the order header record.
+      - name: carrier_tracking_number
+        description: >
+          Tracking number assigned to the shipment for this line item, when
+          available.
+      - name: order_qty
+        description: >
+          Number of units ordered for this line item.
+      - name: product_id
+        description: >
+          Identifier of the product purchased on this line item. Foreign key
+          to stg_adventure_db__products.product_id.
+      - name: special_offer_id
+        description: >
+          Identifier for the special offer or promotion applied to the line
+          item, when one exists.
+      - name: unit_price
+        description: >
+          Price per unit for the product on this line item at the time of
+          purchase.
+      - name: unit_price_discount
+        description: >
+          Discount applied to the unit price for this line item.
+      - name: line_total
+        description: >
+          Total value of the line item after quantity and discount are applied.
+      - name: modified_date
+        description: >
+          Timestamp when the line item record was last modified in the source
+          system.
+
+  - name: base_real_time__sales_orders
+    description: >
+      Each row represents one raw sales order from the real-time order header
+      feed. Grain: one row per order. This base model converts the incoming
+      data to typed columns and leaves the order_details field empty so the
+      line items can be reattached later from base_real_time__order_details.
+      It is the source for stg_real_time__sales_orders.
+    columns:
+      - name: sales_order_id
+        description: >
+          Unique identifier for the sales order in the source system. Primary
+          key at the order grain.
+      - name: customer_id
+        description: >
+          Identifier of the customer who placed the order. Used to connect
+          orders back to customer data.
+      - name: account_number
+        description: >
+          Account number associated with the customer on the order.
+      - name: bill_to_address_id
+        description: >
+          Identifier for the billing address attached to the order.
+      - name: comment
+        description: >
+          Free-text note attached to the order. May be null.
+      - name: credit_card_approval_code
+        description: >
+          Payment authorization code recorded for the order.
+      - name: credit_card_id
+        description: >
+          Identifier for the stored credit card used on the order, when one
+          exists.
+      - name: currency_rate_id
+        description: >
+          Identifier for the exchange-rate record applied to the order, when
+          one exists.
+      - name: delivery_estimate
+        description: >
+          Delivery estimate text from the source system. In this feed it is
+          currently null and reserved for compatibility with the legacy
+          e-commerce order shape.
+      - name: due_date
+        description: >
+          Date and time the order is due, as provided by the source system.
+      - name: freight
+        description: >
+          Shipping and handling charge for the order.
+      - name: modified_date
+        description: >
+          Timestamp when the order record was last modified in the source
+          system.
+      - name: online_order_flag
+        description: >
+          Flag indicating whether the order was placed online. A value of 1
+          means online; 0 means non-online or manual entry.
+      - name: order_date
+        description: >
+          Timestamp when the order was placed.
+      - name: order_details
+        description: >
+          Placeholder field for the nested order detail payload. This base
+          model keeps the column shape aligned with the combined staging
+          model before the actual array is rebuilt downstream.
+      - name: purchase_order_number
+        description: >
+          Purchase order number associated with the sales order, when present.
+      - name: revision_number
+        description: >
+          Revision number for the order record in the source system.
+      - name: sales_order_number
+        description: >
+          Human-readable order number from the source system.
+      - name: sales_person_id
+        description: >
+          Identifier for the salesperson assigned to the order.
+      - name: ship_date
+        description: >
+          Date and time the order was shipped, when available.
+      - name: ship_method_id
+        description: >
+          Identifier for the shipping method selected for the order.
+      - name: ship_to_address_id
+        description: >
+          Identifier for the shipping address attached to the order.
+      - name: status
+        description: >
+          Current order status code from the source system. The numeric value
+          indicates where the order sits in the fulfillment lifecycle.
+      - name: sub_total
+        description: >
+          Order subtotal before tax, shipping, and other adjustments.
+      - name: tax_amt
+        description: >
+          Tax amount applied to the order.
+      - name: territory_id
+        description: >
+          Identifier for the sales territory associated with the order.
+      - name: total_due
+        description: >
+          Final amount due for the order after subtotal, tax, and freight are
+          combined.
+
