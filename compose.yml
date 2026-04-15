@@ -1,3 +1,17 @@
+# =============================================================================
+# compose.yml - Docker Compose Orchestration (All Milestones)
+#
+# Defines all containerized services for the data platform:
+#   M1: postgres (source DB), mongo (chat logs), generator (simulates new data),
+#       processor (Python ETL that extracts, stages, and loads to Snowflake)
+#   M2: prefect-server, prefect-worker, web-analytics-flow (REST API ingestion
+#       with watermark-based incremental loading into Snowflake)
+#   M3: dbt-mcp (MCP server exposing dbt models to AI agents on port 8000)
+#
+# Usage: docker compose up -d          (start everything)
+#        docker compose up processor   (just run the ETL once)
+#        docker compose up dbt-mcp     (start the MCP server)
+# =============================================================================
 services:
   # =========================================================================
   # Milestone 1: Data Sources and ETL

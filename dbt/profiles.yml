@@ -1,3 +1,12 @@
+# =============================================================================
+# dbt/profiles.yml - Snowflake Connection Profile
+#
+# Defines the "adventure-ops" profile that dbt uses to connect to Snowflake.
+# All credentials are pulled from environment variables (never hardcoded).
+# The target schema is dbt_dev, where all staging and intermediate models
+# are built. This file is used both locally (with .env) and inside the
+# dbt-mcp Docker container.
+# =============================================================================
 adventure-ops:
   target: dev
   outputs:

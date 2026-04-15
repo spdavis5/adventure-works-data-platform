@@ -1,3 +1,13 @@
+# =============================================================================
+# dbt/dbt_project.yml - dbt Project Configuration
+#
+# Configures the "adventure" dbt project. Key settings:
+#   - model-paths: ["models-m1", "models-m2"] splits models across milestones
+#   - Staging models are materialized as tables (full rebuild each run)
+#   - Intermediate models are materialized as views (lightweight joins)
+#   - Seeds (ship_method, measures) live in the seeds/ directory
+#   - Profile "adventure-ops" connects to Snowflake via profiles.yml
+# =============================================================================
 # Name your project! Project names should contain only lowercase characters
 # and underscores. A good package name should reflect your organization's
 # name or the intended use of these models

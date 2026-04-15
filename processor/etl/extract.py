@@ -1,3 +1,15 @@
+# =============================================================================
+# processor/etl/extract.py - Data Extraction Logic (Milestone 1)
+#
+# Contains the two extraction functions used by main.py:
+#   - extract_table_data(): Pulls rows from PostgreSQL (orders, order_details)
+#     using a watermark filter on last_modified to avoid re-extracting old data.
+#   - extract_chat_logs(): Pulls documents from MongoDB (chat_logs) using the
+#     same watermark pattern but with MongoDB query syntax ($gt).
+#
+# Both functions return a pandas DataFrame. If no new data is found, they
+# return an empty DataFrame so the downstream staging/loading steps are skipped.
+# =============================================================================
 import pandas as pd
 from sqlalchemy import create_engine
 import os

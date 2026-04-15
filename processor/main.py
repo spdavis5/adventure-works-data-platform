@@ -1,4 +1,18 @@
-# Entry point: main.py
+# =============================================================================
+# processor/main.py - ETL Microservice Entry Point (Milestone 1)
+#
+# This is the main orchestrator for the Python ETL processor. Each cycle it:
+#   1. Extracts new orders and order_details from PostgreSQL using watermarks
+#   2. Extracts new chat logs from MongoDB using watermarks
+#   3. Stages the extracted data as local CSV/JSON files
+#   4. PUTs the files to Snowflake internal stages (@orders_stage, etc.)
+#   5. Runs COPY INTO to load staged files into RAW_EXT raw tables
+#   6. Cleans up the stage after a successful load
+#
+# Controlled by env vars: PROCESSOR_INTERVAL_SEC (0 = run once),
+# PROCESSOR_ENABLE_COPY_INTO, PROCESSOR_ENABLE_CLEANUP.
+# Runs inside Docker via: docker compose up processor
+# =============================================================================
 from utils.env_loader import load_environment
 from datetime import datetime, timezone
 import time

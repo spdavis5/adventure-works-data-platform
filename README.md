@@ -2,7 +2,7 @@
 
 # Adventure Works Data Platform
 
-> An end-to-end data platform that extracts sales, customer, chat, and web analytics data from four heterogeneous sources, loads it into Snowflake, transforms it with dbt, and exposes the models to AI agents through an MCP server.
+> An end-to-end data platform that extracts sales, customer, chat, and web analytics data from four sources, loads it into Snowflake, transforms it with dbt, and exposes the models to AI agents through an MCP server.
 
 ## Architecture
 
@@ -69,7 +69,9 @@
 
 ## Problem Statement
 
-Adventure Works has operational data spread across multiple systems. Sales orders and customer records live in PostgreSQL, customer support chat logs are stored in MongoDB, marketing campaign data arrives in CSV files, and web analytics clickstream events come from a REST API. Without a unified platform, stakeholders cannot answer cross-cutting questions like "Which marketing campaigns drove the most revenue?" or "How does web behavior differ between customers who open support tickets and those who do not?" This platform consolidates all four sources into a single Snowflake warehouse and transforms the data into analysis-ready models with full lineage and documentation.
+Adventure Works has operational data spread across multiple systems. Sales orders and customer records live in PostgreSQL, customer support chat logs sit in MongoDB, marketing campaign data arrives in CSV files, and web analytics clickstream events come from a REST API. Without a single place to query all of this, there is no easy way to answer cross-cutting questions like "Which marketing campaigns drove the most revenue?" or "How does web behavior differ between customers who open support tickets and those who do not?"
+
+I built this platform to consolidate all four sources into a single Snowflake warehouse and transform the raw data into clean, analysis-ready models with full lineage and documentation. The final milestone adds an AI agent access layer so that an LLM can discover and query the models programmatically.
 
 ---
 
@@ -77,24 +79,24 @@ Adventure Works has operational data spread across multiple systems. Sales order
 
 | Layer | Technology | Why |
 |-------|-----------|-----|
-| Source Systems | PostgreSQL, MongoDB, REST API | These represent the kind of heterogeneous sources found in real companies. Relational databases, document stores, and APIs each require different extraction strategies, which forces the pipeline to handle diverse data formats. |
-| Extraction | Python ETL Processor | A custom processor allows watermark-based incremental loading, which avoids re-extracting unchanged data. The processor stages files locally before loading them into Snowflake via COPY INTO for efficient bulk ingestion. |
-| Warehouse | Snowflake | Snowflake separates compute from storage, so the warehouse can scale down when idle without losing data. Its native support for semi-structured data (VARIANT columns) handles the nested JSON from MongoDB chat logs and the order details array without requiring a separate transformation step. |
-| Transformation | dbt | dbt provides version-controlled SQL transformations with built-in testing, lineage tracking, and documentation generation. This means the data team can validate data quality on every commit and trace how a column flows from source to analytics. |
-| Orchestration | Prefect | Prefect handles the web analytics ingestion flow with built-in retries, logging, and scheduling. It was simpler to configure than Airflow for this project while still providing full observability into task execution and failures. |
-| CI/CD | dbt Cloud + GitHub | dbt Cloud runs automated builds on a daily cadence and triggers test suites on every pull request. This prevents breaking changes from reaching the production schema. |
+| Source Systems | PostgreSQL, MongoDB, REST API | These represent the kind of sources you find at real companies. Relational databases, document stores, and APIs each need different extraction strategies, which forces the pipeline to handle diverse data formats. |
+| Extraction | Python ETL Processor | I built a custom processor so I could use watermark-based incremental loading, which avoids re-extracting data that has not changed. The processor stages files locally before loading them into Snowflake via COPY INTO for efficient bulk ingestion. |
+| Warehouse | Snowflake | Snowflake separates compute from storage, so the warehouse can scale down when idle without losing data. Its native support for semi-structured data (VARIANT columns) handles the nested JSON from MongoDB chat logs and the order details array without needing a separate transformation step. |
+| Transformation | dbt | dbt gives me version-controlled SQL transformations with built-in testing, lineage tracking, and documentation generation. That means data quality gets validated on every commit and I can trace how any column flows from source to analytics. |
+| Orchestration | Prefect | Prefect handles the web analytics ingestion flow with built-in retries, logging, and scheduling. It was simpler to configure than Airflow for this project while still giving me full observability into task execution and failures. |
+| CI/CD | dbt Cloud + GitHub | dbt Cloud runs automated builds on a daily schedule and triggers test suites on every pull request. This prevents breaking changes from reaching the production schema. |
 | Agent Access | dbt MCP Server | MCP exposes the dbt project's models, descriptions, compiled SQL, and lineage to AI agents. An agent can discover models, read column documentation, and trace dependencies without needing direct database access. |
-| Containerization | Docker Compose | Docker Compose ensures every service (PostgreSQL, MongoDB, Prefect, the processor, and the MCP server) runs in a reproducible environment. A new developer can clone the repo and run `docker compose up` to get the full platform running. |
+| Containerization | Docker Compose | Docker Compose ensures every service (PostgreSQL, MongoDB, Prefect, the processor, and the MCP server) runs in a reproducible environment. Someone can clone the repo and run `docker compose up` to get the full platform running. |
 
 ---
 
 ## Data Flow
 
-**Ingestion.** Data enters the platform from four sources. The Python ETL processor extracts sales orders and order details from PostgreSQL, and chat logs from MongoDB. It stages each batch as JSON/CSV files locally, then loads them into Snowflake's RAW_EXT schema via internal stages and COPY INTO. For web analytics, a Prefect flow polls the REST API on a configurable schedule, using watermark-based incremental loading to pull only new clickstream events since the last run. Customer, product, vendor, and campaign data are ingested either via existing batch pipelines or as dbt seeds.
+Data enters the platform from four sources. The Python ETL processor extracts sales orders and order details from PostgreSQL, and chat logs from MongoDB. It stages each batch as JSON/CSV files locally, then loads them into Snowflake's RAW_EXT schema via internal stages and COPY INTO. For web analytics, a Prefect flow polls the REST API on a configurable schedule, using watermark-based incremental loading to pull only new clickstream events since the last run. Customer, product, vendor, and campaign data come in through existing batch pipelines or as dbt seeds.
 
-**Transformation.** dbt processes the raw data in two layers. Staging models (like `stg_ecom__sales_orders`, `stg_adventure_db__customers`, and `stg_web_analytics`) clean, cast, and rename columns from their raw source format. Some staging models are more complex, for example `stg_ecom__sales_orders` unions legacy batch data with real-time streaming orders, converts text-based delivery estimates into numeric days, and resolves shipping method IDs to human-readable names. Intermediate models then join across sources. `int_sales_order_line_items` flattens the nested order details array into one row per line item. `int_sales_order_with_customers` enriches orders with customer demographics. `int_sales_orders_with_campaign` attributes orders to marketing campaigns. `int_web_analytics_with_customers` joins clickstream events to customer profiles for behavioral analysis.
+From there, dbt processes the raw data in two layers. Staging models like `stg_ecom__sales_orders`, `stg_adventure_db__customers`, and `stg_web_analytics` clean, cast, and rename columns from their raw source format. Some are more involved than others. For example, `stg_ecom__sales_orders` unions legacy batch data with real-time streaming orders, converts text-based delivery estimates into numeric days, and resolves shipping method IDs to human-readable names. Intermediate models then join across sources. `int_sales_order_line_items` flattens the nested order details array into one row per line item, `int_sales_order_with_customers` enriches orders with customer demographics, `int_sales_orders_with_campaign` attributes orders to marketing campaigns, and `int_web_analytics_with_customers` joins clickstream events to customer profiles for behavioral analysis.
 
-**Serving.** The transformed data is consumed through three channels. A Snowsight dashboard visualizes 30-day sales trends and order metrics. dbt Cloud runs daily production builds and CI/CD test suites on pull requests. The dbt MCP server exposes all 20 models with full column-level documentation and lineage to AI agents, enabling programmatic data discovery and SQL compilation.
+The transformed data is consumed through three channels: a Snowsight dashboard for 30-day sales trends, dbt Cloud for daily production builds and CI/CD, and the dbt MCP server which exposes all 20 models with full column-level documentation and lineage to AI agents.
 
 ---
 
@@ -156,13 +158,13 @@ See `.env.sample` for the full list.
 ## Project Milestones
 
 ### Milestone 1: Core Pipeline
-Built the foundational data pipeline from scratch. Developed a containerized Python ETL microservice to extract recent sales orders and order details from PostgreSQL, and chat logs from MongoDB using watermark dates, staging them locally before loading to Snowflake via COPY INTO. Created 18 dbt models across three layers: 5 base models for raw data parsing, 10 staging models for cleaning and standardization (including using `ARRAY_AGG` to reverse lateral flattening and nest order details), and 3 intermediate models for cross-source joins. Implemented 5 generic tests (unique, not_null, accepted_values, relationships) and 4 singular SQL tests for business logic validation. Loaded 2 seed files (`ship_method`, `measures`) for reference data. Built a Snowsight dashboard analyzing sales over the past 30 days by date and country to prove end-to-end functionality.
+I built the foundational data pipeline from scratch. I developed a containerized Python ETL microservice to extract recent sales orders and order details from PostgreSQL, and chat logs from MongoDB using watermark dates, staging them locally before loading to Snowflake via COPY INTO. I created 18 dbt models across three layers: 5 base models for raw data parsing, 10 staging models for cleaning and standardization (including using `ARRAY_AGG` to reverse lateral flattening and nest order details), and 3 intermediate models for cross-source joins. I implemented 5 generic tests (unique, not_null, accepted_values, relationships) and 4 singular SQL tests for business logic validation. I loaded 2 seed files (`ship_method`, `measures`) for reference data and built a Snowsight dashboard analyzing sales over the past 30 days by date and country to prove end-to-end functionality.
 
 ### Milestone 2: Orchestration, Quality, and Agent-Assisted Development
-Added web analytics ingestion via Prefect, pulling clickstream events from a REST API with watermark-based incremental loading. Created `stg_web_analytics` and `int_web_analytics_with_customers` to join clickstream data with customer profiles. Configured source freshness monitoring with a 12-hour warn and 24-hour error threshold on web analytics data. Integrated dbt Cloud for scheduled production builds and CI/CD on pull requests. Added 2 singular tests for web analytics data quality.
+I added web analytics ingestion via Prefect, pulling clickstream events from a REST API with watermark-based incremental loading. I created `stg_web_analytics` and `int_web_analytics_with_customers` to join clickstream data with customer profiles. I configured source freshness monitoring with a 12-hour warn and 24-hour error threshold on web analytics data, integrated dbt Cloud for scheduled production builds and CI/CD on pull requests, and added 2 singular tests for web analytics data quality.
 
 ### Milestone 3: Agent Access and Portfolio
-Deployed the dbt MCP server in Docker Compose, exposing all 20 models to AI agents via SSE. Upgraded every model and column description in `models.yml` to be agent-friendly, with grain statements, join targets, primary/foreign key annotations, and business context. Built a Python demo client that connects to the MCP server and demonstrates tool discovery, model listing, model details, SQL compilation, and lineage traversal. Wrote a reflection on agent data access patterns and production considerations.
+I deployed the dbt MCP server in Docker Compose, exposing all 20 models to AI agents via SSE. I upgraded every model and column description in `models.yml` to be agent-friendly, with grain statements, join targets, primary/foreign key annotations, and business context. I built a Python demo client that connects to the MCP server and demonstrates tool discovery, model listing, model details, SQL compilation, and lineage traversal. I also wrote a reflection on agent data access patterns and production considerations.
 
 ---
 
@@ -182,18 +184,12 @@ Deployed the dbt MCP server in Docker Compose, exposing all 20 models to AI agen
 
 ## What I Learned
 
-The biggest lesson from this project was that documentation is not an afterthought. When I first tried to write agent-friendly YAML descriptions, I gave an AI assistant my models without enough context and got back inaccurate column names and descriptions. I had to provide the actual SQL for each model and verify every column name by hand. That process taught me that even with AI assistance, the data engineer is responsible for the accuracy of the metadata. I also learned that small configuration details matter more than I expected. A missing `version: 2` header in my YAML file caused dbt to silently ignore all 1,400 lines of documentation, and it took deliberate debugging to find it. If I were starting over, I would write the documentation alongside each model as I built it rather than going back to document everything at the end. The iterative approach is more accurate and less painful.
+This project fundamentally changed how I approach large-scale data engineering in an AI-augmented workflow. I realized that the primary friction point often isn't the AI's lack of technical reasoning, but rather the human failure to provide quality context and specificity. Clearly communicating expectations and requirements and anticipating potential issues is becoming an increasingly important skill for architecting robust systems and pipelines with AI. A few prompts I fed to AI agents during this project weren't specific enough, or didn't provide enough context, which caused me to have to edit code manually and troubleshoot to get the desired result. This took extra time and effort that could have been avoided with more upfront planning and anticipation.
 
 ---
 
 ## Future Improvements
 
-- **Mart Layer**: Add a marts directory with business-ready aggregation models like daily revenue summaries, customer lifetime value, and campaign ROI tables. This would reduce the query complexity for dashboard consumers.
-- **Incremental Materializations**: Convert the larger staging models (like `stg_ecom__sales_orders`) from full table rebuilds to incremental materializations. This would reduce build times and Snowflake compute costs as data volume grows.
-- **Role-Based MCP Access**: Implement access controls on the MCP server so that agents can only see models relevant to their domain. Sensitive columns like credit card approval codes or email addresses should be masked or excluded depending on the agent's role.
-
----
-
-## Technical Decisions
-
-See [technical_decisions.md](technical_decisions.md) for detailed documentation of key architectural choices.
+- **Pipeline Alerting**: Enhance the Prefect orchestration to trigger automated Slack or email alerts if the web analytics extraction or any upstream database pulls fail, ensuring immediate visibility into pipeline outages.
+- **Incremental Materializations**: Convert the larger staging models (like `stg_ecom__sales_orders`) from full table rebuilds to incremental materializations. This would reduce dbt build times and Snowflake compute costs as data volume grows.
+- **Role-Based MCP Access**: Implement access controls on the MCP server so that departmental agents can only see models relevant to their domain. By doing this, sensitive columns like customer email addresses could be dynamically masked or excluded depending on the agent's role.
