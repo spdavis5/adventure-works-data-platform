@@ -83,15 +83,9 @@ def render_tool_result(result) -> str:
 async def run_demo():
     """
     Connect to the dbt MCP server and run a series of demonstrations.
-
-    TODO: Students should complete the implementation below using the
-    MCP Python SDK. The steps are outlined with descriptions of what
-    each section should do.
     """
 
     # Step 0: Import MCP client library
-    # You'll need: from mcp.client.sse import sse_client
-    #              from mcp.client.session import ClientSession
     from mcp.client.sse import sse_client
     from mcp.client.session import ClientSession
 
@@ -101,19 +95,7 @@ async def run_demo():
     log("")
 
     # ----- STEP 1: Connect to the MCP server -----
-    #
-    # Use the SSE client transport to connect to the server.
-    # The connection URL should match MCP_SERVER_URL above.
-    #
-    # Example pattern:
-    #   async with sse_client(MCP_SERVER_URL) as (read, write):
-    #       async with ClientSession(read, write) as session:
-    #           await session.initialize()
-    #           ... rest of demo ...
-    #
     log("Step 1: Connecting to dbt MCP server...")
-    # TODO: Implement connection
-    # log("Connected successfully!")
 
     async with sse_client(MCP_SERVER_URL) as (read, write):
         async with ClientSession(read, write) as session:
@@ -121,21 +103,6 @@ async def run_demo():
             log("Connected successfully!")
 
             # ----- STEP 2: List available tools -----
-            #
-            # IMPORTANT: Run this step first! Tool names may change between
-            # dbt-mcp versions. Use the output here to discover the actual
-            # tool names for Steps 3-6.
-            #
-            # Call session.list_tools() to see what capabilities the MCP server exposes.
-            # Print each tool's name and description.
-            #
-            # As of dbt-mcp 0.2.x, common tools include:
-            #   - list: List dbt resources (models, sources, etc.)
-            #   - get_node_details_dev: Get detailed info about a specific node
-            #   - compile: Compile SQL for a model
-            #   - get_lineage_dev: Get upstream/downstream dependencies
-            #   - show: Execute a SQL query against the database
-            #
             log("")
             log("Step 2: Listing available tools...")
             try:
@@ -146,18 +113,7 @@ async def run_demo():
             except Exception as e:
                 log(f"Step 2 failed: {e}")
 
-            # TODO: Implement tool listing
-            # tools = await session.list_tools()
-            # for tool in tools.tools:
-            #     log(f"  - {tool.name}: {tool.description[:100]}")
-
             # ----- STEP 3: List all dbt models -----
-            #
-            # Use the "list" tool to list all models in the dbt project.
-            # Print model names and their descriptions.
-            #
-            # Hint: result = await session.call_tool("list", {"resource_type": "model"})
-            #
             log("")
             log("Step 3: Discovering dbt models...")
             try:
@@ -168,15 +124,8 @@ async def run_demo():
                 log(render_tool_result(result))
             except Exception as e:
                 log(f"Step 3 failed: {e}")
-            # TODO: Implement model listing
 
             # ----- STEP 4: Get details on a specific model -----
-            #
-            # Pick one of your staging or intermediate models and request
-            # its full details: columns, tests, upstream/downstream dependencies.
-            #
-            # Hint: result = await session.call_tool("get_node_details_dev", {"node_id": "stg_ecom__sales_orders"})
-            #
             log("")
             log("Step 4: Getting details for a specific model...")
             try:
@@ -187,15 +136,8 @@ async def run_demo():
                 log(render_tool_result(result))
             except Exception as e:
                 log(f"Step 4 failed: {e}")
-            # TODO: Implement model detail retrieval
 
             # ----- STEP 5: Compile SQL for a model -----
-            #
-            # Ask the MCP server to compile the SQL for one of your models.
-            # This shows the fully resolved SQL that dbt would execute.
-            #
-            # Hint: result = await session.call_tool("compile", {"models": "int_sales_order_line_items"})
-            #
             log("")
             log("Step 5: Compiling SQL for a model...")
             try:
@@ -206,19 +148,8 @@ async def run_demo():
                 log(render_tool_result(result))
             except Exception as e:
                 log(f"Step 5 failed: {e}")
-            # TODO: Implement SQL compilation
 
             # ----- STEP 6: Explore model lineage -----
-            #
-            # Use get_lineage_dev to trace the lineage of a model:
-            # what are its upstream sources and downstream dependents?
-            #
-            # Hint: result = await session.call_tool("get_lineage_dev", {
-            #     "unique_id": "model.adventure.stg_ecom__sales_orders",
-            #     "depth": 2,
-            # })
-            # Note: unique_id format is "model.<project_name>.<model_name>"
-            #
             log("")
             log("Step 6: Exploring model lineage...")
             try:
@@ -232,7 +163,6 @@ async def run_demo():
                 log(render_tool_result(result))
             except Exception as e:
                 log(f"Step 6 failed: {e}")
-            # TODO: Implement lineage exploration
 
     # ----- WRAP UP -----
     log("")

@@ -1,5 +1,5 @@
 -- ============================================================================
--- Milestone 1: Create Raw Tables
+-- Create Raw Tables
 -- ============================================================================
 -- Run these statements in your Snowflake worksheet.
 -- Make sure you've set your database, schema, and warehouse first:

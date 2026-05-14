@@ -2,7 +2,7 @@
 # dbt/dbt_project.yml - dbt Project Configuration
 #
 # Configures the "adventure" dbt project. Key settings:
-#   - model-paths: ["models-m1", "models-m2"] splits models across milestones
+#   - model-paths: ["models"] defines the model directory
 #   - Staging models are materialized as tables (full rebuild each run)
 #   - Intermediate models are materialized as views (lightweight joins)
 #   - Seeds (ship_method, measures) live in the seeds/ directory
@@ -20,7 +20,7 @@ profile: "adventure-ops"
 # These configurations specify where dbt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
 # found in the "models/" directory. You probably won't need to change these!
-model-paths: ["models-m1", "models-m2"]
+model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
 seed-paths: ["seeds"]

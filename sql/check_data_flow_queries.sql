@@ -1,5 +1,5 @@
 -- ============================================================================
--- Milestone 1: Data Flow Validation Queries
+-- Data Flow Validation Queries
 -- ============================================================================
 -- Run these queries one at a time to trace data through your pipeline.
 -- Set your database first: USE DATABASE <your_database>;

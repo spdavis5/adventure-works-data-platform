@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: adventure_db
-    database: is566
+    database: ADVENTURE_WORKS
     schema: adventure_prod_db
     tables:
       - name: inventory_prod_db
@@ -11,14 +11,14 @@ sources:
       - name: product_prod_db
       - name: vendor_prod_db
   - name: ecom_source
-    database: is566
+    database: ADVENTURE_WORKS
     schema: old_mktg
     tables:
       - name: email_campaign_raw
       - name: purchase_order_raw
       - name: sales_order_raw
   - name: new_mktg
-    database: is566
+    database: ADVENTURE_WORKS
     schema: "{{ 'new_mktg_dev' if target.name == 'dev' else 'new_mktg_prod' }}"
     tables:
       - name: email_mktg_raw

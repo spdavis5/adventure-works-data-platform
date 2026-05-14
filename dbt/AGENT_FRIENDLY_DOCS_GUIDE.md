@@ -301,8 +301,8 @@ Before you consider your documentation complete, verify:
 
 All model and column descriptions go in your YAML files, typically:
 
-- `dbt/models-m1/models.yml` (if you use a single file)
-- `dbt/models-m1/staging/sources.yml` (for source definitions)
+- `dbt/models/models.yml` (if you use a single file)
+- `dbt/models/staging/sources.yml` (for source definitions)
 - Or individual `_schema.yml` files alongside your models
 
 The `description:` field goes at the model level and at the column level within each model. Use YAML multi-line strings (`>` or `|`) for longer descriptions to keep the file readable.

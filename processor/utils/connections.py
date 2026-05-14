@@ -1,5 +1,5 @@
 # =============================================================================
-# processor/utils/connections.py - Database Connection Factory (Milestone 1)
+# processor/utils/connections.py - Database Connection Factory
 #
 # Provides three connection helpers used by the ETL processor:
 #   - get_postgres_connection(): Connects to the PostgreSQL source database

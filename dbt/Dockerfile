@@ -9,8 +9,7 @@ RUN uv sync --no-dev --frozen
 
 # Copy dbt project files
 COPY dbt_project.yml profiles.yml ./
-COPY models-m1/ ./models-m1/
-COPY models-m2/ ./models-m2/
+COPY models/ ./models/
 COPY analyses/ ./analyses/
 COPY tests/ ./tests/
 COPY seeds/ ./seeds/

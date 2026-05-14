@@ -1,7 +1,5 @@
 # Agent Data Access Reflection
 
-> Now that you've set up the dbt MCP server and seen an AI agent interact with your data models, take some time to think critically about what this means for data engineering. This reflection should be thoughtful (500-800 words), not a checklist.
-
 ---
 
 ## 1. What Worked Well

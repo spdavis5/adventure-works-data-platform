@@ -1,16 +1,15 @@
 # =============================================================================
-# dbt/models-m1/models.yml - Model & Column Documentation (Milestones 1 & 3)
+# dbt/models/models.yml - Model & Column Documentation
 #
-# This is the central documentation file for all 18 Milestone 1 dbt models.
-# It contains agent-friendly descriptions for every model and column, including:
+# This is the central documentation file for the dbt models in this project.
+# It contains descriptions for every model and column, including:
 #   - Grain statements (e.g., "one row per order")
 #   - Primary/foreign key annotations with explicit join targets
 #   - Business context for flag columns and derived fields
 #   - Generic tests (unique, not_null, accepted_values, relationships)
 #
-# In Milestone 3, every description was upgraded to be AI-agent-friendly
-# so the MCP server can expose meaningful metadata to LLMs. The version: 2
-# header at the top is critical. Without it, dbt silently ignores this file.
+# Every description has been optimized to be AI-agent-friendly so the MCP
+# server can expose meaningful metadata to LLMs.
 # =============================================================================
 version: 2
 

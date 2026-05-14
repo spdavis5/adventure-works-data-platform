@@ -1,12 +1,10 @@
 # =============================================================================
-# compose.yml - Docker Compose Orchestration (All Milestones)
+# compose.yml - Docker Compose Orchestration
 #
 # Defines all containerized services for the data platform:
-#   M1: postgres (source DB), mongo (chat logs), generator (simulates new data),
-#       processor (Python ETL that extracts, stages, and loads to Snowflake)
-#   M2: prefect-server, prefect-worker, web-analytics-flow (REST API ingestion
-#       with watermark-based incremental loading into Snowflake)
-#   M3: dbt-mcp (MCP server exposing dbt models to AI agents on port 8000)
+#   - Sources: postgres (transactional), mongo (chat logs)
+#   - Pipelines: processor (ETL), web-analytics-flow (incremental API load)
+#   - Tools: prefect (orchestration), dbt-mcp (AI-agent interface)
 #
 # Usage: docker compose up -d          (start everything)
 #        docker compose up processor   (just run the ETL once)
@@ -14,7 +12,7 @@
 # =============================================================================
 services:
   # =========================================================================
-  # Milestone 1: Data Sources and ETL
+  # Data Sources and ETL
   # =========================================================================
 
   mongo:
@@ -87,7 +85,7 @@ services:
     command: ["uv", "run", "python", "main.py"]
 
   # =========================================================================
-  # Milestone 2: Prefect Orchestration (uncomment when you reach Milestone 2)
+  # Workflow Orchestration
   # =========================================================================
 
   prefect-server:
@@ -124,9 +122,9 @@ services:
         "worker",
         "start",
         "-n",
-        "is566-worker",
+        "platform-worker",
         "--pool",
-        "is566-pool",
+        "platform-pool",
         "--type",
         "process",
       ]
@@ -149,7 +147,7 @@ services:
     restart: on-failure
 
   # =========================================================================
-  # Milestone 3: dbt MCP Server
+  # dbt MCP Server
   # =========================================================================
 
   dbt-mcp:

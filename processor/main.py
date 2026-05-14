@@ -1,6 +1,6 @@
 # =============================================================================
-# processor/main.py - ETL Microservice Entry Point (Milestone 1)
-#
+# processor/main.py - ETL Microservice Entry Point
+
 # This is the main orchestrator for the Python ETL processor. Each cycle it:
 #   1. Extracts new orders and order_details from PostgreSQL using watermarks
 #   2. Extracts new chat logs from MongoDB using watermarks
@@ -26,8 +26,7 @@ ENABLE_COPY_INTO = os.getenv("PROCESSOR_ENABLE_COPY_INTO", "true").lower() == "t
 ENABLE_CLEANUP = os.getenv("PROCESSOR_ENABLE_CLEANUP", "true").lower() == "true"
 
 
-# The extract section below is complete. Your job: implement the
-# COPY INTO and cleanup orchestration in the TODO section (Task 2).
+# The extract section below orchestrates the ETL process.
 def run_once():
     from etl.extract import extract_table_data, extract_chat_logs
     from etl.load import upload_dataframe_to_stage, copy_stage_to_table, clean_stage

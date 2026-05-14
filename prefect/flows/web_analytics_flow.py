@@ -54,7 +54,7 @@ def _get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
             role=os.getenv("SNOWFLAKE_ROLE"),
         )
     except snowflake.connector.Error as e:
-        # Logging connection failures specifically (Task 4.4 requirement)
+        # Logging connection failures specifically
         print(f"Failed to connect to Snowflake: {e}")
         raise
 
@@ -283,7 +283,7 @@ def stage_and_load(df: pd.DataFrame) -> None:
         try:
             cur = conn.cursor()
 
-            # --- 2. PUT to internal stage (Task 4.4 error handling) ---
+            # --- 2. PUT to internal stage ---
             try:
                 put_sql = (
                     f"PUT file://{local_path} @WEB_ANALYTICS_STAGE/ "
@@ -295,7 +295,7 @@ def stage_and_load(df: pd.DataFrame) -> None:
                 logger.error(f"Failed to PUT file to Snowflake: {e}")
                 raise
 
-            # --- 3. COPY INTO (Task 4.4 error handling) ---
+            # --- 3. COPY INTO ---
             copy_sql = f"""
                 COPY INTO RAW_EXT.web_analytics_raw
                     (customer_id, product_id, session_id,
@@ -312,7 +312,7 @@ def stage_and_load(df: pd.DataFrame) -> None:
             try:
                 results = cur.execute(copy_sql).fetchall()
                 
-                # --- 4. Verify load result (Task 4.4 detailed counts) ---
+                # --- 4. Verify load result ---
                 total_loaded = 0
                 total_errors = 0
                 for row in results:
@@ -408,11 +408,11 @@ if __name__ == "__main__":
     schedule_minutes = int(os.getenv("FLOW_SCHEDULE_MINUTES", "0"))
 
     if schedule_minutes > 0:
-    #     # Deployed mode with a schedule (Task 3.1 requirement)
-    #     web_analytics_flow.serve(
-    #         name="web-analytics-scheduled",
-    #         interval=schedule_minutes * 60,
-    #     )
-    # else:
-    #     # One-shot local execution for manual triggers or dbt tests
+        # Deployed mode with a schedule
+        web_analytics_flow.serve(
+            name="web-analytics-scheduled",
+            interval=schedule_minutes * 60,
+        )
+    else:
+        # One-shot local execution
         web_analytics_flow()

@@ -1,5 +1,5 @@
 -- =============================================================================
--- Snowflake Objects for Web Analytics Pipeline (Milestone 2)
+-- Snowflake Objects for Web Analytics Pipeline
 -- =============================================================================
 -- Run these statements in your Snowflake worksheet BEFORE running the Prefect
 -- flow. Make sure you are using the correct database and warehouse.

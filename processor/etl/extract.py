@@ -1,5 +1,5 @@
 # =============================================================================
-# processor/etl/extract.py - Data Extraction Logic (Milestone 1)
+# processor/etl/extract.py - Data Extraction Logic
 #
 # Contains the two extraction functions used by main.py:
 #   - extract_table_data(): Pulls rows from PostgreSQL (orders, order_details)
